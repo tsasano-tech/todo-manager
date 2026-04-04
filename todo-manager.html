@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TODO" />
+  <meta name="theme-color" content="#1C1C1F" />
+  <title>TODO Manager</title>
+
+  <!-- PWA manifest (inline blob) -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const m = { name:"TODO Manager", short_name:"TODO", start_url:".", display:"standalone",
+        background_color:"#1C1C1F", theme_color:"#1C1C1F",
+        icons:[{src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAQ5SURBVHhe7dAxAQAAAMKg9U9tCy+gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBuAABHgAAAABJRU5ErkJggg==",sizes:"192x192",type:"image/png"}]};
+      const el = document.createElement('link');
+      el.rel = 'manifest';
+      el.href = URL.createObjectURL(new Blob([JSON.stringify(m)], {type:'application/json'}));
+      document.head.appendChild(el);
+    });
+  </script>
+
+  <!-- Apple touch icon -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%231C1C1F'/%3E%3Ctext y='125' x='90' text-anchor='middle' font-size='100' font-family='serif'%3E📋%3C/text%3E%3C/svg%3E" />
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    html, body { margin:0; padding:0; background:#1C1C1F; overflow-x:hidden; }
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const CATEGORIES = [
+  { id:"work",     label:"仕事",   color:"#E8B4B8" },
+  { id:"personal", label:"個人",   color:"#A8D8EA" },
+  { id:"urgent",   label:"緊急",   color:"#F7DC6F" },
+  { id:"other",    label:"その他", color:"#ABEBC6" },
+];
+const PRIORITIES = [
+  { id:"high", label:"高", color:"#E8B4B8", symbol:"▲" },
+  { id:"mid",  label:"中", color:"#F7DC6F", symbol:"◆" },
+  { id:"low",  label:"低", color:"#777",    symbol:"▼" },
+];
+const REMINDER_OPTIONS = [
+  { id:"none", label:"なし",    mins:null  },
+  { id:"10m",  label:"10分前",  mins:10    },
+  { id:"30m",  label:"30分前",  mins:30    },
+  { id:"1h",   label:"1時間前", mins:60    },
+  { id:"1d",   label:"1日前",   mins:1440  },
+  { id:"3d",   label:"3日前",   mins:4320  },
+  { id:"1w",   label:"1週間前", mins:10080 },
+];
+const REPEAT_OPTIONS = [
+  { id:"none",    label:"繰り返しなし" },
+  { id:"daily",   label:"毎日" },
+  { id:"weekly",  label:"毎週" },
+  { id:"monthly", label:"毎月" },
+  { id:"bizdays", label:"毎月●営業日" },
+  { id:"yearly",  label:"毎年" },
+];
+const FILTERS = ["すべて","未完了","完了済み"];
+const STORAGE_KEY = "claude-todo-manager-v1";
+
+const today = new Date();
+const fmt = d => d.toISOString().split("T")[0];
+const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return fmt(x); };
+
+function deadlineStatus(due) {
+  if (!due) return null;
+  const now=new Date(); now.setHours(0,0,0,0);
+  const d=new Date(due); d.setHours(0,0,0,0);
+  const diff=Math.round((d-now)/86400000);
+  if (diff<0)  return {label:`${-diff}日超過`,color:"#E8A0AA",urgent:true};
+  if (diff===0) return {label:"今日",         color:"#F7DC6F",urgent:true};
+  if (diff<=3)  return {label:`あと${diff}日`,color:"#F7DC6F",urgent:false};
+  return {label:`あと${diff}日`,color:"#666",urgent:false};
+}
+function isWeekday(d){ const w=d.getDay(); return w!==0&&w!==6; }
+function getNthBizDay(year,month,n){
+  const d=new Date(year,month,1); let count=0;
+  while(true){
+    if(isWeekday(d)){count++; if(count===n)return new Date(d);}
+    d.setDate(d.getDate()+1);
+    if(d.getMonth()!==month){
+      const last=new Date(year,month+1,0);
+      while(!isWeekday(last))last.setDate(last.getDate()-1);
+      return last;
+    }
+  }
+}
+function advanceBizDays(due,bizDay){
+  if(!due||!bizDay)return due;
+  const d=new Date(due);
+  const nm=d.getMonth()+1>11?0:d.getMonth()+1;
+  const ny=d.getMonth()+1>11?d.getFullYear()+1:d.getFullYear();
+  return fmt(getNthBizDay(ny,nm,bizDay));
+}
+function advanceDue(due,repeat,bizDay){
+  if(!due||repeat==="none")return due;
+  if(repeat==="bizdays")return advanceBizDays(due,bizDay);
+  const d=new Date(due);
+  if(repeat==="daily")  d.setDate(d.getDate()+1);
+  if(repeat==="weekly") d.setDate(d.getDate()+7);
+  if(repeat==="monthly")d.setMonth(d.getMonth()+1);
+  if(repeat==="yearly") d.setFullYear(d.getFullYear()+1);
+  return fmt(d);
+}
+function bizDayLabel(n){return n?`毎月第${n}営業日`:"毎月●営業日";}
+function reminderLabel(todo){
+  if(!todo.reminder||todo.reminder==="none")return null;
+  return (REMINDER_OPTIONS.find(r=>r.id===todo.reminder)||{}).label||null;
+}
+function repeatLabel(repeat,bizDay){
+  if(!repeat||repeat==="none")return null;
+  if(repeat==="bizdays")return bizDayLabel(bizDay);
+  return (REPEAT_OPTIONS.find(r=>r.id===repeat)||{}).label||null;
+}
+function computeReminderTime(due,reminder){
+  if(!due||!reminder||reminder==="none")return null;
+  const opt=REMINDER_OPTIONS.find(r=>r.id===reminder);
+  if(!opt||opt.mins===null)return null;
+  const d=new Date(`${due}T09:00:00`);
+  d.setMinutes(d.getMinutes()-opt.mins);
+  return d.toISOString();
+}
+function requestNotifPermission(){
+  if(typeof Notification!=="undefined"&&Notification.permission==="default")
+    Notification.requestPermission();
+}
+function scheduleNotif(todo){
+  if(typeof Notification==="undefined")return null;
+  if(!todo.due||!todo.reminderTime||todo.reminder==="none")return null;
+  const delay=new Date(todo.reminderTime).getTime()-Date.now();
+  if(delay<=0)return null;
+  return setTimeout(()=>{
+    if(Notification.permission==="granted")
+      new Notification(`📋 リマインダー: ${todo.text}`,{body:`期限: ${todo.due}`});
+  },delay);
+}
+function loadTodos(){
+  try{
+    const s=localStorage.getItem(STORAGE_KEY);
+    if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0)return p;}
+  }catch(e){}
+  return [
+    {id:1,text:"プロジェクト資料を作成する",category:"work",priority:"high",due:addDays(today,2),memo:"スライド20枚、グラフ含む",done:false,reminder:"1d",reminderTime:computeReminderTime(addDays(today,2),"1d"),repeat:"none"},
+    {id:2,text:"週次レポートを提出",category:"urgent",priority:"high",due:fmt(today),memo:"",done:false,reminder:"30m",reminderTime:computeReminderTime(fmt(today),"30m"),repeat:"weekly"},
+    {id:4,text:"家賃の支払い",category:"personal",priority:"high",due:addDays(today,5),memo:"口座振替確認",done:false,reminder:"3d",reminderTime:computeReminderTime(addDays(today,5),"3d"),repeat:"monthly"},
+  ];
+}
+
+function App(){
+  const [todos,setTodos]=useState(()=>loadTodos());
+  useEffect(()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(todos));}catch(e){}},[todos]);
+
+  const [input,setInput]=useState("");
+  const [selectedCat,setSelectedCat]=useState("work");
+  const [selPri,setSelPri]=useState("mid");
+  const [dueDate,setDueDate]=useState("");
+  const [memo,setMemo]=useState("");
+  const [reminder,setReminder]=useState("none");
+  const [repeat,setRepeat]=useState("none");
+  const [bizDay,setBizDay]=useState(1);
+  const [showAdv,setShowAdv]=useState(false);
+  const [filter,setFilter]=useState("すべて");
+  const [activeCat,setActiveCat]=useState("すべて");
+  const [sortBy,setSortBy]=useState("created");
+  const [expandedId,setExpandedId]=useState(null);
+  const [editingId,setEditingId]=useState(null);
+  const [editState,setEditState]=useState({});
+  const [confirmId,setConfirmId]=useState(null);
+  const [toasts,setToasts]=useState([]);
+  const timerRefs=useRef({});
+  const inputRef=useRef(null);
+  const confirmTodo=confirmId?todos.find(t=>t.id===confirmId):null;
+
+  useEffect(()=>{requestNotifPermission();},[]);
+  useEffect(()=>{
+    Object.values(timerRefs.current).forEach(clearTimeout);
+    timerRefs.current={};
+    todos.forEach(t=>{if(!t.done){const id=scheduleNotif(t);if(id)timerRefs.current[t.id]=id;}});
+    return ()=>Object.values(timerRefs.current).forEach(clearTimeout);
+  },[todos]);
+  useEffect(()=>{
+    const check=()=>{
+      const now=new Date();now.setHours(0,0,0,0);
+      setTodos(prev=>prev.map(t=>{
+        if(!t.done||!t.repeat||t.repeat==="none"||!t.nextDue)return t;
+        const nd=new Date(t.nextDue);nd.setHours(0,0,0,0);
+        if(Math.round((nd-now)/86400000)<=10)return{...t,done:false,due:t.nextDue,nextDue:null};
+        return t;
+      }));
+    };
+    check();
+    const timer=setInterval(check,3600000);
+    return ()=>clearInterval(timer);
+  },[]);
+
+  const filtered=todos
+    .filter(t=>{
+      const cm=activeCat==="すべて"||t.category===activeCat;
+      const sm=filter==="すべて"||(filter==="未完了"?!t.done:t.done);
+      return cm&&sm;
+    })
+    .sort((a,b)=>{
+      if(sortBy==="priority"){const o={high:0,mid:1,low:2};return o[a.priority]-o[b.priority];}
+      if(sortBy==="due"){if(!a.due&&!b.due)return 0;if(!a.due)return 1;if(!b.due)return -1;return a.due.localeCompare(b.due);}
+      return b.id-a.id;
+    });
+
+  const addTodo=()=>{
+    if(!input.trim())return;
+    const rt=computeReminderTime(dueDate,reminder);
+    const newId=todos.reduce((max,t)=>Math.max(max,t.id),0)+1;
+    setTodos([{id:newId,text:input.trim(),category:selectedCat,priority:selPri,due:dueDate,memo:memo.trim(),done:false,reminder,reminderTime:rt,repeat,bizDay:repeat==="bizdays"?bizDay:null},...todos]);
+    setInput("");setDueDate("");setMemo("");setReminder("none");setRepeat("none");setBizDay(1);setShowAdv(false);
+    inputRef.current&&inputRef.current.focus();
+  };
+  const toggleDone=id=>{
+    setTodos(prev=>prev.map(t=>{
+      if(t.id!==id)return t;
+      if(!t.done&&t.repeat&&t.repeat!=="none"&&t.due){
+        const nextDue=advanceDue(t.due,t.repeat,t.bizDay);
+        return{...t,done:true,nextDue,reminderTime:computeReminderTime(nextDue,t.reminder)};
+      }
+      return{...t,done:!t.done};
+    }));
+  };
+  const deleteTodo=id=>{setTodos(prev=>prev.filter(t=>t.id!==id));if(expandedId===id)setExpandedId(null);};
+  const startEdit=t=>{
+    setEditingId(t.id);setExpandedId(t.id);
+    setEditState({text:t.text,priority:t.priority,due:t.due||"",memo:t.memo||"",category:t.category,reminder:t.reminder||"none",repeat:t.repeat||"none",bizDay:t.bizDay||1});
+  };
+  const saveEdit=id=>{
+    if(!editState.text?.trim())return;
+    const rt=computeReminderTime(editState.due,editState.reminder);
+    setTodos(prev=>prev.map(t=>t.id===id?{...t,...editState,text:editState.text.trim(),reminderTime:rt,bizDay:editState.repeat==="bizdays"?(editState.bizDay||1):null}:t));
+    setEditingId(null);
+  };
+  const getCat=id=>CATEGORIES.find(c=>c.id===id);
+  const getPri=id=>PRIORITIES.find(p=>p.id===id);
+  const completedCount=todos.filter(t=>t.done).length;
+  const progress=todos.length?Math.round((completedCount/todos.length)*100):0;
+
+  const bizInput=(val,setFn)=>(
+    <div style={{display:"flex",alignItems:"center",gap:"8px",marginTop:"6px"}}>
+      <span style={{color:"#6A6A7A",fontSize:"12px"}}>毎月</span>
+      <input type="number" min="1" max="23" value={val}
+        onFocus={e=>e.target.select()}
+        onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v))setFn(Math.max(1,Math.min(23,v)));else setFn("");}}
+        onBlur={e=>{if(!e.target.value||isNaN(parseInt(e.target.value)))setFn(1);}}
+        style={{width:"52px",background:"#1C1C1F",border:"1px solid #3A3A44",borderRadius:"4px",color:"#D0CCC8",fontSize:"13px",padding:"4px 8px",outline:"none",textAlign:"center",fontFamily:"'DM Mono',monospace"}} />
+      <span style={{color:"#6A6A7A",fontSize:"12px"}}>営業日目</span>
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:"100vh",background:"#1C1C1F",fontFamily:"'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif",display:"flex",justifyContent:"center"}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600&family=DM+Mono:wght@400;500&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        .app{width:100%;max-width:700px;min-height:100vh;padding:52px 18px 100px;}
+        .hdr{margin-bottom:36px;}
+        .hdr-top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;}
+        .t-sub{font-family:'Noto Serif JP',serif;font-size:11px;font-weight:300;letter-spacing:.4em;color:#8A8A9A;text-transform:uppercase;}
+        .t-main{font-family:'Noto Serif JP',serif;font-size:36px;font-weight:300;color:#F5F2ED;line-height:1;margin-top:4px;}
+        .s-num{font-family:'DM Mono',monospace;font-size:32px;color:#F5F2ED;text-align:right;}
+        .s-lbl{font-size:10px;color:#6A6A7A;letter-spacing:.15em;margin-top:2px;text-align:right;}
+        .prog-bar{height:2px;background:#2E2E35;border-radius:2px;position:relative;overflow:visible;}
+        .prog-fill{height:2px;background:linear-gradient(90deg,#E8A0AA,#7EC8E3);transition:width .6s;border-radius:2px;position:relative;}
+        .prog-fill::after{content:'';position:absolute;right:0;top:50%;transform:translateY(-50%);width:6px;height:6px;border-radius:50%;background:#7EC8E3;box-shadow:0 0 10px #7EC8E3;}
+        .sec-lbl{font-size:10px;letter-spacing:.2em;color:#6A6A7A;text-transform:uppercase;margin-bottom:10px;}
+        .inp-area{background:#252528;border:1px solid #36363D;border-radius:8px;padding:14px 14px;margin-bottom:20px;display:flex;flex-direction:column;gap:11px;}
+        .inp-row{display:flex;gap:10px;align-items:center;}
+        .txt-inp{flex:1;background:transparent;border:none;outline:none;color:#F5F2ED;font-size:15px;font-family:inherit;caret-color:#7EC8E3;}
+        .txt-inp::placeholder{color:#4A4A55;}
+        .add-btn{background:#F5F2ED;border:none;color:#1C1C1F;font-size:20px;cursor:pointer;width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+        .add-btn:active{background:#7EC8E3;}
+        .tog-adv{background:transparent;border:none;color:#6A6A7A;font-size:11px;letter-spacing:.08em;cursor:pointer;display:flex;align-items:center;gap:6px;padding:0;}
+        .adv-arr{display:inline-block;transition:transform .2s;font-size:9px;}
+        .adv-flds{display:flex;flex-direction:column;gap:10px;padding-top:10px;border-top:1px solid #32323A;}
+        .fld-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+        .fld-lbl{font-size:10px;letter-spacing:.1em;color:#6A6A7A;width:46px;flex-shrink:0;}
+        .dt-inp{background:#1C1C1F;border:1px solid #3A3A44;border-radius:6px;color:#D0CCC8;font-size:12px;font-family:'DM Mono',monospace;padding:5px 10px;outline:none;}
+        .dt-inp::-webkit-calendar-picker-indicator{filter:invert(.5);}
+        .memo-inp{flex:1;background:transparent;border:none;border-bottom:1px solid #36363D;color:#B0ACA8;font-size:12px;font-family:inherit;outline:none;padding:3px 0;caret-color:#7EC8E3;resize:none;min-height:24px;line-height:1.5;}
+        .memo-inp::placeholder{color:#404048;}
+        .pri-chip{font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid transparent;cursor:pointer;background:transparent;}
+        .cat-chip{font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid transparent;cursor:pointer;background:transparent;}
+        .opt-chip{font-size:11px;padding:5px 11px;border-radius:20px;border:1px solid #383840;cursor:pointer;background:transparent;color:#6A6A7A;white-space:nowrap;}
+        .opt-chip.on{background:#2E2E38;color:#D0CCC8;border-color:#58586A;}
+        .flt-row{display:flex;border-bottom:1px solid #2E2E35;margin-bottom:8px;}
+        .flt-btn{font-size:12px;letter-spacing:.08em;padding:8px 14px;background:transparent;border:none;color:#5A5A6A;cursor:pointer;position:relative;}
+        .flt-btn.on{color:#F5F2ED;}
+        .flt-btn.on::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:2px;background:#F5F2ED;border-radius:2px;}
+        .flt-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-top:10px;flex-wrap:wrap;gap:8px;}
+        .cat-flt-row{display:flex;gap:6px;flex-wrap:wrap;}
+        .cat-flt-btn{font-size:11px;padding:5px 11px;border-radius:20px;border:1px solid #36363D;background:transparent;color:#6A6A7A;cursor:pointer;}
+        .srt-sel{background:#252528;border:1px solid #36363D;color:#7A7A8A;font-size:11px;padding:5px 8px;border-radius:6px;outline:none;font-family:inherit;}
+        .srt-sel option{background:#252528;}
+        .td-list{display:flex;flex-direction:column;gap:4px;}
+        .td-card{background:#222226;border:1px solid #32323A;border-radius:8px;overflow:hidden;}
+        .td-card.done{opacity:.4;}
+        .td-card.ov{border-left:3px solid #E8A0AA;}
+        .td-main{display:flex;align-items:center;gap:11px;padding:13px 13px;}
+        .chk-btn{width:22px;height:22px;border-radius:50%;border:1.5px solid #484858;background:transparent;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:transparent;transition:all .2s;}
+        .chk-btn.chkd{border-color:transparent;color:#1C1C1F;}
+        .cat-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+        .pri-sym{font-size:11px;flex-shrink:0;}
+        .td-cnt{flex:1;min-width:0;cursor:pointer;}
+        .td-txt{font-size:14px;color:#E8E5E0;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .td-txt.dn{text-decoration:line-through;color:#525260;}
+        .td-meta{display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap;}
+        .due-bdg{font-family:'DM Mono',monospace;font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid;}
+        .bdg{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid #383845;color:#7A7A8A;}
+        .rpt-bdg{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid #2A4035;color:#5AAA80;}
+        .memo-prev{font-size:11px;color:#585868;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
+        .exp-btn{background:transparent;border:none;color:#484858;font-size:11px;cursor:pointer;padding:4px 5px;flex-shrink:0;}
+        .act-btn{background:transparent;border:none;color:#484858;cursor:pointer;font-size:14px;padding:4px 5px;line-height:1;}
+        .act-btn.del:active{color:#E8A0AA;}
+        .act-btn.sav:active{color:#7EC8E3;}
+        .exp-panel{border-top:1px solid #2E2E35;padding:13px 13px;display:flex;flex-direction:column;gap:11px;background:#1E1E22;}
+        .exp-fld{display:flex;gap:10px;align-items:flex-start;}
+        .exp-lbl{font-size:10px;letter-spacing:.1em;color:#5A5A6A;width:46px;flex-shrink:0;padding-top:2px;}
+        .exp-val{font-size:12px;color:#A0A0B0;flex:1;line-height:1.5;}
+        .exp-val.emp{color:#3A3A45;}
+        .exp-inp{flex:1;background:transparent;border:none;border-bottom:1px solid #3A3A45;color:#D0CCC8;font-size:12px;font-family:inherit;outline:none;padding:2px 0 3px;caret-color:#7EC8E3;}
+        .exp-dt{background:#1C1C1F;border:1px solid #38383E;border-radius:4px;color:#C8C4C0;font-size:12px;font-family:'DM Mono',monospace;padding:4px 8px;outline:none;}
+        .exp-dt::-webkit-calendar-picker-indicator{filter:invert(.5);}
+        .exp-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:2px;}
+        .chips{display:flex;gap:6px;flex-wrap:wrap;}
+        .rpt-info{display:flex;align-items:center;gap:6px;padding:6px 11px;background:#1A2E22;border:1px solid #2A4535;}
+        .rpt-info-t{font-size:11px;color:#5AAA80;}
+        .toast-wrap{position:fixed;bottom:24px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none;}
+        .toast{background:#252528;border:1px solid #3A3A44;border-left:3px solid #F0C060;border-radius:8px;padding:12px 14px;min-width:220px;max-width:300px;pointer-events:all;animation:sli .3s ease;}
+        @keyframes sli{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+        .toast-ttl{font-size:11px;color:#F0C060;letter-spacing:.08em;margin-bottom:4px;}
+        .toast-txt{font-size:13px;color:#E0DDD8;line-height:1.4;}
+        .toast-cl{float:right;background:transparent;border:none;color:#6A6A7A;cursor:pointer;font-size:14px;margin-left:8px;}
+        .conf-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px);animation:fdi .15s ease;}
+        @keyframes fdi{from{opacity:0}to{opacity:1}}
+        .conf-box{background:#252528;border:1px solid #3A3A44;border-radius:12px;padding:24px 22px 20px;width:min(300px,90vw);animation:poi .2s cubic-bezier(.34,1.56,.64,1);}
+        @keyframes poi{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+        .conf-ico{font-size:28px;text-align:center;margin-bottom:10px;}
+        .conf-ttl{font-size:15px;color:#F5F2ED;text-align:center;margin-bottom:6px;}
+        .conf-sub{font-size:12px;color:#7A7A8A;text-align:center;margin-bottom:16px;line-height:1.5;}
+        .conf-task{font-size:13px;color:#B0B8C8;background:#1C1C1F;border:1px solid #32323A;border-radius:6px;padding:8px 12px;margin-bottom:16px;text-align:center;}
+        .conf-btns{display:flex;gap:8px;}
+        .conf-btn{flex:1;padding:10px;border-radius:8px;border:none;font-size:13px;cursor:pointer;font-family:inherit;}
+        .conf-btn.cl{background:#2E2E35;color:#9A9AAA;}
+        .conf-btn.ok{background:#F5F2ED;color:#1C1C1F;}
+        .conf-btn.ok:active{background:#7EC8E3;}
+        .empty{text-align:center;color:#3A3A45;font-size:12px;letter-spacing:.1em;padding:48px 0;}
+      `}</style>
+
+      {/* Confirm dialog */}
+      {confirmId && confirmTodo && (
+        <div className="conf-ov" onClick={()=>setConfirmId(null)}>
+          <div className="conf-box" onClick={e=>e.stopPropagation()}>
+            <div className="conf-ico">✅</div>
+            <div className="conf-ttl">タスクを完了にしますか？</div>
+            {confirmTodo.repeat && confirmTodo.repeat!=="none" && (
+              <div className="conf-sub">🔁 繰り返しタスクです。完了にすると次の期限に自動更新されます。</div>
+            )}
+            <div className="conf-task">{confirmTodo.text}</div>
+            <div className="conf-btns">
+              <button className="conf-btn cl" onClick={()=>setConfirmId(null)}>キャンセル</button>
+              <button className="conf-btn ok" onClick={()=>{toggleDone(confirmId);setConfirmId(null);}}>完了にする</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toasts */}
+      <div className="toast-wrap">
+        {toasts.map(t=>(
+          <div key={t.id} className="toast">
+            <button className="toast-cl" onClick={()=>setToasts(p=>p.filter(x=>x.id!==t.id))}>✕</button>
+            <div className="toast-ttl">🔔 リマインダー</div>
+            <div className="toast-txt">{t.text}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="app">
+        {/* Header */}
+        <div className="hdr">
+          <div className="hdr-top">
+            <div>
+              <div className="t-sub">Task Manager</div>
+              <div className="t-main">TODO</div>
+            </div>
+            <div>
+              <div className="s-num"><span style={{color:"#A8D8EA"}}>{completedCount}</span><span style={{color:"#333",fontSize:"18px"}}> / {todos.length}</span></div>
+              <div className="s-lbl">完了 / 合計</div>
+            </div>
+          </div>
+          <div className="prog-bar"><div className="prog-fill" style={{width:`${progress}%`}} /></div>
+        </div>
+
+        {/* Input */}
+        <div className="sec-lbl">新しいタスク</div>
+        <div className="inp-area">
+          <div className="inp-row">
+            <input ref={inputRef} className="txt-inp" placeholder="タスクを入力..." value={input}
+              onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()} />
+            <button className="add-btn" onClick={addTodo}>＋</button>
+          </div>
+          <div style={{display:"flex",gap:"7px",flexWrap:"wrap"}}>
+            {CATEGORIES.map(c=>(
+              <button key={c.id} className="cat-chip"
+                style={{borderColor:selectedCat===c.id?c.color:"transparent",color:selectedCat===c.id?c.color:"#484858",background:selectedCat===c.id?`${c.color}15`:"transparent"}}
+                onClick={()=>setSelectedCat(c.id)}>{c.label}</button>
+            ))}
+          </div>
+          <button className="tog-adv" onClick={()=>setShowAdv(!showAdv)}>
+            <span className="adv-arr" style={{transform:showAdv?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+            {showAdv?"詳細を閉じる":"優先度・期限・リマインダー・繰り返しを設定"}
+          </button>
+          {showAdv && (
+            <div className="adv-flds">
+              <div className="fld-row">
+                <span className="fld-lbl">優先度</span>
+                {PRIORITIES.map(p=>(
+                  <button key={p.id} className="pri-chip"
+                    style={{borderColor:selPri===p.id?p.color:"transparent",color:selPri===p.id?p.color:"#484858",background:selPri===p.id?`${p.color}15`:"transparent"}}
+                    onClick={()=>setSelPri(p.id)}>{p.symbol} {p.label}</button>
+                ))}
+              </div>
+              <div className="fld-row">
+                <span className="fld-lbl">期限</span>
+                <input type="date" className="dt-inp" value={dueDate} onChange={e=>setDueDate(e.target.value)} />
+              </div>
+              <div className="fld-row">
+                <span className="fld-lbl">🔔 通知</span>
+                <div className="chips">
+                  {REMINDER_OPTIONS.map(r=>(
+                    <button key={r.id} className={`opt-chip${reminder===r.id?" on":""}`} onClick={()=>setReminder(r.id)}>{r.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="fld-row">
+                <span className="fld-lbl">🔁 繰返</span>
+                <div style={{display:"flex",flexDirection:"column",flex:1,gap:"6px"}}>
+                  <div className="chips">
+                    {REPEAT_OPTIONS.map(r=>(
+                      <button key={r.id} className={`opt-chip${repeat===r.id?" on":""}`} onClick={()=>setRepeat(r.id)}>{r.label}</button>
+                    ))}
+                  </div>
+                  {repeat==="bizdays"&&bizInput(bizDay,setBizDay)}
+                </div>
+              </div>
+              <div className="fld-row">
+                <span className="fld-lbl">メモ</span>
+                <textarea className="memo-inp" placeholder="メモを追加..." value={memo} rows={2} onChange={e=>setMemo(e.target.value)} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div className="flt-row">
+          {FILTERS.map(f=>(
+            <button key={f} className={`flt-btn${filter===f?" on":""}`} onClick={()=>setFilter(f)}>{f}</button>
+          ))}
+        </div>
+        <div className="flt-meta">
+          <div className="cat-flt-row">
+            {["すべて",...CATEGORIES.map(c=>c.id)].map(c=>{
+              const cat=CATEGORIES.find(x=>x.id===c);
+              return (
+                <button key={c} className="cat-flt-btn"
+                  style={activeCat===c&&cat?{background:cat.color,borderColor:cat.color,color:"#1C1C1F"}:activeCat===c?{background:"#F0EDE8",borderColor:"#F0EDE8",color:"#1C1C1F"}:{}}
+                  onClick={()=>setActiveCat(c)}>{cat?cat.label:"すべて"}</button>
+              );
+            })}
+          </div>
+          <select className="srt-sel" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+            <option value="created">作成順</option>
+            <option value="priority">優先度順</option>
+            <option value="due">期限順</option>
+          </select>
+        </div>
+
+        {/* Todo list */}
+        <div className="td-list">
+          {filtered.length===0&&<div className="empty">タスクがありません</div>}
+          {filtered.map(t=>{
+            const cat=getCat(t.category);
+            const pri=getPri(t.priority);
+            const ds=deadlineStatus(t.due);
+            const isExp=expandedId===t.id;
+            const isEdt=editingId===t.id;
+            const rl=reminderLabel(t);
+            const rp=repeatLabel(t.repeat,t.bizDay);
+            return (
+              <div key={t.id} className={`td-card${t.done?" done":""}${ds?.urgent&&!t.done?" ov":""}`}>
+                <div className="td-main">
+                  <button className={`chk-btn${t.done?" chkd":""}`}
+                    style={t.done?{background:cat?.color||"#aaa"}:{}}
+                    onClick={()=>t.done?toggleDone(t.id):setConfirmId(t.id)}>
+                    {t.done?"✓":""}
+                  </button>
+                  <div className="cat-dot" style={{background:cat?.color||"#555"}} />
+                  <span className="pri-sym" style={{color:pri?.color||"#666"}}>{pri?.symbol}</span>
+                  <div className="td-cnt" onClick={()=>setExpandedId(isExp?null:t.id)}>
+                    <div className={`td-txt${t.done?" dn":""}`}>{t.text}</div>
+                    <div className="td-meta">
+                      {ds&&!t.done&&<span className="due-bdg" style={{color:ds.color,borderColor:`${ds.color}40`}}>{ds.label}</span>}
+                      {t.due&&t.done&&<span className="due-bdg" style={{color:"#333",borderColor:"#222"}}>{t.due}</span>}
+                      {t.done&&t.nextDue&&<span className="bdg" style={{color:"#5AAA80",borderColor:"#2A4035"}}>🔁 {t.nextDue}の10日前に復活</span>}
+                      {rl&&!t.done&&<span className="bdg">🔔 {rl}</span>}
+                      {rp&&<span className="rpt-bdg">🔁 {rp}</span>}
+                      {t.memo&&<span className="memo-prev">✎ {t.memo}</span>}
+                    </div>
+                  </div>
+                  <button className="exp-btn" onClick={()=>setExpandedId(isExp?null:t.id)}>{isExp?"▲":"▼"}</button>
+                  <button className="act-btn" onClick={()=>startEdit(t)}>✎</button>
+                  <button className="act-btn del" onClick={()=>deleteTodo(t.id)}>✕</button>
+                </div>
+
+                {rp&&!t.done&&!isExp&&(
+                  <div className="rpt-info"><span className="rpt-info-t">🔁 {rp}で自動更新 — 完了で次の期限へ</span></div>
+                )}
+
+                {isExp&&(
+                  <div className="exp-panel">
+                    {isEdt?(
+                      <>
+                        <div className="exp-fld">
+                          <span className="exp-lbl">タスク</span>
+                          <input className="exp-inp" value={editState.text||""} autoFocus
+                            onChange={e=>setEditState({...editState,text:e.target.value})}
+                            onKeyDown={e=>e.key==="Enter"&&saveEdit(t.id)} />
+                        </div>
+                        <div className="exp-fld" style={{alignItems:"center"}}>
+                          <span className="exp-lbl">優先度</span>
+                          <div style={{display:"flex",gap:"6px"}}>
+                            {PRIORITIES.map(p=>(
+                              <button key={p.id} className="pri-chip"
+                                style={{borderColor:editState.priority===p.id?p.color:"transparent",color:editState.priority===p.id?p.color:"#484858",background:editState.priority===p.id?`${p.color}15`:"transparent"}}
+                                onClick={()=>setEditState({...editState,priority:p.id})}>{p.symbol} {p.label}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="exp-fld" style={{alignItems:"center"}}>
+                          <span className="exp-lbl">カテゴリ</span>
+                          <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                            {CATEGORIES.map(c=>(
+                              <button key={c.id} className="cat-chip"
+                                style={{borderColor:editState.category===c.id?c.color:"transparent",color:editState.category===c.id?c.color:"#484858",background:editState.category===c.id?`${c.color}12`:"transparent"}}
+                                onClick={()=>setEditState({...editState,category:c.id})}>{c.label}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="exp-fld" style={{alignItems:"center"}}>
+                          <span className="exp-lbl">期限</span>
+                          <input type="date" className="exp-dt" value={editState.due||""} onChange={e=>setEditState({...editState,due:e.target.value})} />
+                        </div>
+                        <div className="exp-fld" style={{alignItems:"center"}}>
+                          <span className="exp-lbl">🔔 通知</span>
+                          <div className="chips">
+                            {REMINDER_OPTIONS.map(r=>(
+                              <button key={r.id} className={`opt-chip${editState.reminder===r.id?" on":""}`}
+                                onClick={()=>setEditState({...editState,reminder:r.id})}>{r.label}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="exp-fld" style={{alignItems:"center"}}>
+                          <span className="exp-lbl">🔁 繰返</span>
+                          <div style={{display:"flex",flexDirection:"column",flex:1,gap:"6px"}}>
+                            <div className="chips">
+                              {REPEAT_OPTIONS.map(r=>(
+                                <button key={r.id} className={`opt-chip${editState.repeat===r.id?" on":""}`}
+                                  onClick={()=>setEditState({...editState,repeat:r.id})}>{r.label}</button>
+                              ))}
+                            </div>
+                            {editState.repeat==="bizdays"&&bizInput(editState.bizDay??1,v=>setEditState({...editState,bizDay:v}))}
+                          </div>
+                        </div>
+                        <div className="exp-fld">
+                          <span className="exp-lbl">メモ</span>
+                          <textarea className="exp-inp" value={editState.memo||""} placeholder="メモを追加..." rows={3}
+                            onChange={e=>setEditState({...editState,memo:e.target.value})}
+                            style={{resize:"none",lineHeight:"1.5"}} />
+                        </div>
+                        <div className="exp-acts">
+                          <button className="act-btn" onClick={()=>setEditingId(null)}>キャンセル</button>
+                          <button className="act-btn sav" onClick={()=>saveEdit(t.id)}>保存</button>
+                        </div>
+                      </>
+                    ):(
+                      <>
+                        <div className="exp-fld"><span className="exp-lbl">優先度</span><span className="exp-val" style={{color:pri?.color||"#666"}}>{pri?.symbol} {pri?.label}</span></div>
+                        <div className="exp-fld"><span className="exp-lbl">カテゴリ</span><span className="exp-val" style={{color:cat?.color||"#888"}}>{cat?.label}</span></div>
+                        <div className="exp-fld">
+                          <span className="exp-lbl">期限</span>
+                          {t.due
+                            ?<span className="exp-val" style={{color:ds?.color||"#888",fontFamily:"'DM Mono',monospace",fontSize:"12px"}}>{t.due}{ds&&!t.done?<span style={{marginLeft:"8px",fontSize:"11px"}}>{ds.label}</span>:null}</span>
+                            :<span className="exp-val emp">未設定</span>}
+                        </div>
+                        <div className="exp-fld">
+                          <span className="exp-lbl">🔔 通知</span>
+                          <span className="exp-val" style={{color:rl?"#C8C5C0":"#3A3A45"}}>
+                            {rl||"なし"}
+                            {rl&&t.reminderTime&&<span style={{color:"#555",fontSize:"11px",marginLeft:"8px",fontFamily:"'DM Mono',monospace"}}>{new Date(t.reminderTime).toLocaleString("ja-JP",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>}
+                          </span>
+                        </div>
+                        <div className="exp-fld">
+                          <span className="exp-lbl">🔁 繰返</span>
+                          <span className="exp-val" style={{color:rp?"#5AAA80":"#3A3A45"}}>
+                            {rp||"なし"}
+                            {rp&&t.done&&t.nextDue&&<span style={{color:"#585868",fontSize:"11px",marginLeft:"8px"}}>次回表示: {t.nextDue}の10日前</span>}
+                            {rp&&!t.done&&t.due&&<span style={{color:"#585868",fontSize:"11px",marginLeft:"8px"}}>→ 次: {advanceDue(t.due,t.repeat,t.bizDay)}</span>}
+                          </span>
+                        </div>
+                        <div className="exp-fld">
+                          <span className="exp-lbl">メモ</span>
+                          {t.memo?<span className="exp-val" style={{whiteSpace:"pre-wrap"}}>{t.memo}</span>:<span className="exp-val emp">なし</span>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
