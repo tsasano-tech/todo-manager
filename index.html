@@ -183,6 +183,10 @@ function App(){
   const [editState,setEditState]=useState({});
   const [confirmId,setConfirmId]=useState(null);
   const [deleteId,setDeleteId]=useState(null);
+  const [showExport,setShowExport]=useState(false);
+  const [showImport,setShowImport]=useState(false);
+  const [importText,setImportText]=useState("");
+  const [importMsg,setImportMsg]=useState("");
   const [toasts,setToasts]=useState([]);
   const timerRefs=useRef({});
   const inputRef=useRef(null);
@@ -242,6 +246,25 @@ function App(){
     }));
   };
   const deleteTodo=id=>{setTodos(prev=>prev.filter(t=>t.id!==id));if(expandedId===id)setExpandedId(null);};
+
+  const exportData=()=>{
+    const data=JSON.stringify(todos,null,2);
+    // Copy to clipboard
+    if(navigator.clipboard){navigator.clipboard.writeText(data);}
+    setShowExport(true);
+  };
+  const doImport=()=>{
+    try{
+      const parsed=JSON.parse(importText);
+      if(!Array.isArray(parsed))throw new Error();
+      setTodos(parsed);
+      setImportText("");
+      setImportMsg("✅ インポート完了！");
+      setTimeout(()=>{setShowImport(false);setImportMsg("");},1500);
+    }catch(e){
+      setImportMsg("❌ データが正しくありません");
+    }
+  };
   const startEdit=t=>{
     setEditingId(t.id);setExpandedId(t.id);
     setEditState({text:t.text,priority:t.priority,due:t.due||"",memo:t.memo||"",category:t.category,reminder:t.reminder||"none",repeat:t.repeat||"none",bizDay:t.bizDay||1});
@@ -334,337 +357,4 @@ function App(){
         .act-btn{background:transparent;border:none;color:#484858;cursor:pointer;font-size:14px;padding:4px 5px;line-height:1;}
         .act-btn.del:active{color:#E8A0AA;}
         .act-btn.sav:active{color:#7EC8E3;}
-        .exp-panel{border-top:1px solid #2E2E35;padding:13px 13px;display:flex;flex-direction:column;gap:11px;background:#1E1E22;}
-        .exp-fld{display:flex;gap:10px;align-items:flex-start;}
-        .exp-lbl{font-size:10px;letter-spacing:.1em;color:#5A5A6A;width:46px;flex-shrink:0;padding-top:2px;}
-        .exp-val{font-size:12px;color:#A0A0B0;flex:1;line-height:1.5;}
-        .exp-val.emp{color:#3A3A45;}
-        .exp-inp{flex:1;background:transparent;border:none;border-bottom:1px solid #3A3A45;color:#D0CCC8;font-size:12px;font-family:inherit;outline:none;padding:2px 0 3px;caret-color:#7EC8E3;}
-        .exp-dt{background:#1C1C1F;border:1px solid #38383E;border-radius:4px;color:#C8C4C0;font-size:12px;font-family:'DM Mono',monospace;padding:4px 8px;outline:none;}
-        .exp-dt::-webkit-calendar-picker-indicator{filter:invert(.5);}
-        .exp-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:2px;}
-        .chips{display:flex;gap:6px;flex-wrap:wrap;}
-        .rpt-info{display:flex;align-items:center;gap:6px;padding:6px 11px;background:#1A2E22;border:1px solid #2A4535;}
-        .rpt-info-t{font-size:11px;color:#5AAA80;}
-        .toast-wrap{position:fixed;bottom:24px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none;}
-        .toast{background:#252528;border:1px solid #3A3A44;border-left:3px solid #F0C060;border-radius:8px;padding:12px 14px;min-width:220px;max-width:300px;pointer-events:all;animation:sli .3s ease;}
-        @keyframes sli{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
-        .toast-ttl{font-size:11px;color:#F0C060;letter-spacing:.08em;margin-bottom:4px;}
-        .toast-txt{font-size:13px;color:#E0DDD8;line-height:1.4;}
-        .toast-cl{float:right;background:transparent;border:none;color:#6A6A7A;cursor:pointer;font-size:14px;margin-left:8px;}
-        .conf-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px);animation:fdi .15s ease;}
-        @keyframes fdi{from{opacity:0}to{opacity:1}}
-        .conf-box{background:#252528;border:1px solid #3A3A44;border-radius:12px;padding:24px 22px 20px;width:min(300px,90vw);animation:poi .2s cubic-bezier(.34,1.56,.64,1);}
-        @keyframes poi{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
-        .conf-ico{font-size:28px;text-align:center;margin-bottom:10px;}
-        .conf-ttl{font-size:15px;color:#F5F2ED;text-align:center;margin-bottom:6px;}
-        .conf-sub{font-size:12px;color:#7A7A8A;text-align:center;margin-bottom:16px;line-height:1.5;}
-        .conf-task{font-size:13px;color:#B0B8C8;background:#1C1C1F;border:1px solid #32323A;border-radius:6px;padding:8px 12px;margin-bottom:16px;text-align:center;}
-        .conf-btns{display:flex;gap:8px;}
-        .conf-btn{flex:1;padding:10px;border-radius:8px;border:none;font-size:13px;cursor:pointer;font-family:inherit;}
-        .conf-btn.cl{background:#2E2E35;color:#9A9AAA;}
-        .conf-btn.ok{background:#F5F2ED;color:#1C1C1F;}
-        .conf-btn.ok:active{background:#7EC8E3;}
-        .empty{text-align:center;color:#3A3A45;font-size:12px;letter-spacing:.1em;padding:48px 0;}
-      `}</style>
-
-      {/* Delete confirm dialog */}
-      {deleteId && deleteTodo_target && (
-        <div className="conf-ov" onClick={()=>setDeleteId(null)}>
-          <div className="conf-box" onClick={e=>e.stopPropagation()}>
-            <div className="conf-ico">🗑️</div>
-            <div className="conf-ttl">タスクを削除しますか？</div>
-            <div className="conf-sub" style={{color:"#E8A0AA"}}>この操作は取り消せません。</div>
-            <div className="conf-task">{deleteTodo_target.text}</div>
-            <div className="conf-btns">
-              <button className="conf-btn cl" onClick={()=>setDeleteId(null)}>キャンセル</button>
-              <button className="conf-btn" style={{background:"#E8A0AA",color:"#1C1C1F"}}
-                onClick={()=>{deleteTodo(deleteId);setDeleteId(null);}}>削除する</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Confirm dialog */}
-      {confirmId && confirmTodo && (
-        <div className="conf-ov" onClick={()=>setConfirmId(null)}>
-          <div className="conf-box" onClick={e=>e.stopPropagation()}>
-            <div className="conf-ico">✅</div>
-            <div className="conf-ttl">タスクを完了にしますか？</div>
-            {confirmTodo.repeat && confirmTodo.repeat!=="none" && (
-              <div className="conf-sub">🔁 繰り返しタスクです。完了にすると次の期限に自動更新されます。</div>
-            )}
-            <div className="conf-task">{confirmTodo.text}</div>
-            <div className="conf-btns">
-              <button className="conf-btn cl" onClick={()=>setConfirmId(null)}>キャンセル</button>
-              <button className="conf-btn ok" onClick={()=>{toggleDone(confirmId);setConfirmId(null);}}>完了にする</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toasts */}
-      <div className="toast-wrap">
-        {toasts.map(t=>(
-          <div key={t.id} className="toast">
-            <button className="toast-cl" onClick={()=>setToasts(p=>p.filter(x=>x.id!==t.id))}>✕</button>
-            <div className="toast-ttl">🔔 リマインダー</div>
-            <div className="toast-txt">{t.text}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="app">
-        {/* Header */}
-        <div className="hdr">
-          <div className="hdr-top">
-            <div>
-              <div className="t-sub">Task Manager</div>
-              <div className="t-main">TODO</div>
-            </div>
-            <div>
-              <div className="s-num"><span style={{color:"#A8D8EA"}}>{completedCount}</span><span style={{color:"#333",fontSize:"18px"}}> / {todos.length}</span></div>
-              <div className="s-lbl">完了 / 合計</div>
-            </div>
-          </div>
-          <div className="prog-bar"><div className="prog-fill" style={{width:`${progress}%`}} /></div>
-        </div>
-
-        {/* Input */}
-        <div className="sec-lbl">新しいタスク</div>
-        <div className="inp-area">
-          <div className="inp-row">
-            <input ref={inputRef} className="txt-inp" placeholder="タスクを入力..." value={input}
-              onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTodo()} />
-            <button className="add-btn" onClick={addTodo}>＋</button>
-          </div>
-          <div style={{display:"flex",gap:"7px",flexWrap:"wrap"}}>
-            {CATEGORIES.map(c=>(
-              <button key={c.id} className="cat-chip"
-                style={{borderColor:selectedCat===c.id?c.color:"transparent",color:selectedCat===c.id?c.color:"#484858",background:selectedCat===c.id?`${c.color}15`:"transparent"}}
-                onClick={()=>setSelectedCat(c.id)}>{c.label}</button>
-            ))}
-          </div>
-          <button className="tog-adv" onClick={()=>setShowAdv(!showAdv)}>
-            <span className="adv-arr" style={{transform:showAdv?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
-            {showAdv?"詳細を閉じる":"優先度・期限・リマインダー・繰り返しを設定"}
-          </button>
-          {showAdv && (
-            <div className="adv-flds">
-              <div className="fld-row">
-                <span className="fld-lbl">優先度</span>
-                {PRIORITIES.map(p=>(
-                  <button key={p.id} className="pri-chip"
-                    style={{borderColor:selPri===p.id?p.color:"transparent",color:selPri===p.id?p.color:"#484858",background:selPri===p.id?`${p.color}15`:"transparent"}}
-                    onClick={()=>setSelPri(p.id)}>{p.symbol} {p.label}</button>
-                ))}
-              </div>
-              <div className="fld-row">
-                <span className="fld-lbl">期限</span>
-                <input type="date" className="dt-inp" value={dueDate} onChange={e=>setDueDate(e.target.value)} />
-              </div>
-              <div className="fld-row">
-                <span className="fld-lbl">🔔 通知</span>
-                <div className="chips">
-                  {REMINDER_OPTIONS.map(r=>(
-                    <button key={r.id} className={`opt-chip${reminder===r.id?" on":""}`} onClick={()=>setReminder(r.id)}>{r.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="fld-row">
-                <span className="fld-lbl">🔁 繰返</span>
-                <div style={{display:"flex",flexDirection:"column",flex:1,gap:"6px"}}>
-                  <div className="chips">
-                    {REPEAT_OPTIONS.map(r=>(
-                      <button key={r.id} className={`opt-chip${repeat===r.id?" on":""}`} onClick={()=>setRepeat(r.id)}>{r.label}</button>
-                    ))}
-                  </div>
-                  {repeat==="bizdays"&&bizInput(bizDay,setBizDay)}
-                </div>
-              </div>
-              <div className="fld-row">
-                <span className="fld-lbl">メモ</span>
-                <textarea className="memo-inp" placeholder="メモを追加..." value={memo} rows={2} onChange={e=>setMemo(e.target.value)} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Filters */}
-        <div className="flt-row">
-          {FILTERS.map(f=>(
-            <button key={f} className={`flt-btn${filter===f?" on":""}`} onClick={()=>setFilter(f)}>{f}</button>
-          ))}
-        </div>
-        <div className="flt-meta">
-          <div className="cat-flt-row">
-            {["すべて",...CATEGORIES.map(c=>c.id)].map(c=>{
-              const cat=CATEGORIES.find(x=>x.id===c);
-              return (
-                <button key={c} className="cat-flt-btn"
-                  style={activeCat===c&&cat?{background:cat.color,borderColor:cat.color,color:"#1C1C1F"}:activeCat===c?{background:"#F0EDE8",borderColor:"#F0EDE8",color:"#1C1C1F"}:{}}
-                  onClick={()=>setActiveCat(c)}>{cat?cat.label:"すべて"}</button>
-              );
-            })}
-          </div>
-          <select className="srt-sel" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
-            <option value="created">作成順</option>
-            <option value="priority">優先度順</option>
-            <option value="due">期限順</option>
-          </select>
-        </div>
-
-        {/* Todo list */}
-        <div className="td-list">
-          {filtered.length===0&&<div className="empty">タスクがありません</div>}
-          {filtered.map(t=>{
-            const cat=getCat(t.category);
-            const pri=getPri(t.priority);
-            const ds=deadlineStatus(t.due);
-            const isExp=expandedId===t.id;
-            const isEdt=editingId===t.id;
-            const rl=reminderLabel(t);
-            const rp=repeatLabel(t.repeat,t.bizDay);
-            return (
-              <div key={t.id} className={`td-card${t.done?" done":""}${ds?.urgent&&!t.done?" ov":""}`}>
-                <div className="td-main">
-                  <button className={`chk-btn${t.done?" chkd":""}`}
-                    style={t.done?{background:cat?.color||"#aaa"}:{}}
-                    onClick={()=>t.done?toggleDone(t.id):setConfirmId(t.id)}>
-                    {t.done?"✓":""}
-                  </button>
-                  <div className="cat-dot" style={{background:cat?.color||"#555"}} />
-                  <span className="pri-sym" style={{color:pri?.color||"#666"}}>{pri?.symbol}</span>
-                  <div className="td-cnt" onClick={()=>setExpandedId(isExp?null:t.id)}>
-                    <div className={`td-txt${t.done?" dn":""}`}>{t.text}</div>
-                    <div className="td-meta">
-                      {ds&&!t.done&&<span className="due-bdg" style={{color:ds.color,borderColor:`${ds.color}40`}}>{ds.label}</span>}
-                      {t.due&&t.done&&<span className="due-bdg" style={{color:"#333",borderColor:"#222"}}>{t.due}</span>}
-                      {t.done&&t.nextDue&&<span className="bdg" style={{color:"#5AAA80",borderColor:"#2A4035"}}>🔁 {t.nextDue}の10日前に復活</span>}
-                      {rl&&!t.done&&<span className="bdg">🔔 {rl}</span>}
-                      {rp&&<span className="rpt-bdg">🔁 {rp}</span>}
-                      {t.memo&&<span className="memo-prev">✎ {t.memo}</span>}
-                    </div>
-                  </div>
-                  <button className="exp-btn" onClick={()=>setExpandedId(isExp?null:t.id)}>{isExp?"▲":"▼"}</button>
-                  <button className="act-btn" onClick={()=>startEdit(t)}>✎</button>
-                  <button className="act-btn del" onClick={()=>setDeleteId(t.id)}>✕</button>
-                </div>
-
-                {rp&&!t.done&&!isExp&&(
-                  <div className="rpt-info"><span className="rpt-info-t">🔁 {rp}で自動更新 — 完了で次の期限へ</span></div>
-                )}
-
-                {isExp&&(
-                  <div className="exp-panel">
-                    {isEdt?(
-                      <>
-                        <div className="exp-fld">
-                          <span className="exp-lbl">タスク</span>
-                          <input className="exp-inp" value={editState.text||""} autoFocus
-                            onChange={e=>setEditState({...editState,text:e.target.value})}
-                            onKeyDown={e=>e.key==="Enter"&&saveEdit(t.id)} />
-                        </div>
-                        <div className="exp-fld" style={{alignItems:"center"}}>
-                          <span className="exp-lbl">優先度</span>
-                          <div style={{display:"flex",gap:"6px"}}>
-                            {PRIORITIES.map(p=>(
-                              <button key={p.id} className="pri-chip"
-                                style={{borderColor:editState.priority===p.id?p.color:"transparent",color:editState.priority===p.id?p.color:"#484858",background:editState.priority===p.id?`${p.color}15`:"transparent"}}
-                                onClick={()=>setEditState({...editState,priority:p.id})}>{p.symbol} {p.label}</button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="exp-fld" style={{alignItems:"center"}}>
-                          <span className="exp-lbl">カテゴリ</span>
-                          <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                            {CATEGORIES.map(c=>(
-                              <button key={c.id} className="cat-chip"
-                                style={{borderColor:editState.category===c.id?c.color:"transparent",color:editState.category===c.id?c.color:"#484858",background:editState.category===c.id?`${c.color}12`:"transparent"}}
-                                onClick={()=>setEditState({...editState,category:c.id})}>{c.label}</button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="exp-fld" style={{alignItems:"center"}}>
-                          <span className="exp-lbl">期限</span>
-                          <input type="date" className="exp-dt" value={editState.due||""} onChange={e=>setEditState({...editState,due:e.target.value})} />
-                        </div>
-                        <div className="exp-fld" style={{alignItems:"center"}}>
-                          <span className="exp-lbl">🔔 通知</span>
-                          <div className="chips">
-                            {REMINDER_OPTIONS.map(r=>(
-                              <button key={r.id} className={`opt-chip${editState.reminder===r.id?" on":""}`}
-                                onClick={()=>setEditState({...editState,reminder:r.id})}>{r.label}</button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="exp-fld" style={{alignItems:"center"}}>
-                          <span className="exp-lbl">🔁 繰返</span>
-                          <div style={{display:"flex",flexDirection:"column",flex:1,gap:"6px"}}>
-                            <div className="chips">
-                              {REPEAT_OPTIONS.map(r=>(
-                                <button key={r.id} className={`opt-chip${editState.repeat===r.id?" on":""}`}
-                                  onClick={()=>setEditState({...editState,repeat:r.id})}>{r.label}</button>
-                              ))}
-                            </div>
-                            {editState.repeat==="bizdays"&&bizInput(editState.bizDay??1,v=>setEditState({...editState,bizDay:v}))}
-                          </div>
-                        </div>
-                        <div className="exp-fld">
-                          <span className="exp-lbl">メモ</span>
-                          <textarea className="exp-inp" value={editState.memo||""} placeholder="メモを追加..." rows={3}
-                            onChange={e=>setEditState({...editState,memo:e.target.value})}
-                            style={{resize:"none",lineHeight:"1.5"}} />
-                        </div>
-                        <div className="exp-acts">
-                          <button className="act-btn" onClick={()=>setEditingId(null)}>キャンセル</button>
-                          <button className="act-btn sav" onClick={()=>saveEdit(t.id)}>保存</button>
-                        </div>
-                      </>
-                    ):(
-                      <>
-                        <div className="exp-fld"><span className="exp-lbl">優先度</span><span className="exp-val" style={{color:pri?.color||"#666"}}>{pri?.symbol} {pri?.label}</span></div>
-                        <div className="exp-fld"><span className="exp-lbl">カテゴリ</span><span className="exp-val" style={{color:cat?.color||"#888"}}>{cat?.label}</span></div>
-                        <div className="exp-fld">
-                          <span className="exp-lbl">期限</span>
-                          {t.due
-                            ?<span className="exp-val" style={{color:ds?.color||"#888",fontFamily:"'DM Mono',monospace",fontSize:"12px"}}>{t.due}{ds&&!t.done?<span style={{marginLeft:"8px",fontSize:"11px"}}>{ds.label}</span>:null}</span>
-                            :<span className="exp-val emp">未設定</span>}
-                        </div>
-                        <div className="exp-fld">
-                          <span className="exp-lbl">🔔 通知</span>
-                          <span className="exp-val" style={{color:rl?"#C8C5C0":"#3A3A45"}}>
-                            {rl||"なし"}
-                            {rl&&t.reminderTime&&<span style={{color:"#555",fontSize:"11px",marginLeft:"8px",fontFamily:"'DM Mono',monospace"}}>{new Date(t.reminderTime).toLocaleString("ja-JP",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>}
-                          </span>
-                        </div>
-                        <div className="exp-fld">
-                          <span className="exp-lbl">🔁 繰返</span>
-                          <span className="exp-val" style={{color:rp?"#5AAA80":"#3A3A45"}}>
-                            {rp||"なし"}
-                            {rp&&t.done&&t.nextDue&&<span style={{color:"#585868",fontSize:"11px",marginLeft:"8px"}}>次回表示: {t.nextDue}の10日前</span>}
-                            {rp&&!t.done&&t.due&&<span style={{color:"#585868",fontSize:"11px",marginLeft:"8px"}}>→ 次: {advanceDue(t.due,t.repeat,t.bizDay)}</span>}
-                          </span>
-                        </div>
-                        <div className="exp-fld">
-                          <span className="exp-lbl">メモ</span>
-                          {t.memo?<span className="exp-val" style={{whiteSpace:"pre-wrap"}}>{t.memo}</span>:<span className="exp-val emp">なし</span>}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
-</script>
-</body>
-</html>
+        .exp-panel{bord
