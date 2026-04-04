@@ -182,10 +182,12 @@ function App(){
   const [editingId,setEditingId]=useState(null);
   const [editState,setEditState]=useState({});
   const [confirmId,setConfirmId]=useState(null);
+  const [deleteId,setDeleteId]=useState(null);
   const [toasts,setToasts]=useState([]);
   const timerRefs=useRef({});
   const inputRef=useRef(null);
   const confirmTodo=confirmId?todos.find(t=>t.id===confirmId):null;
+  const deleteTodo_target=deleteId?todos.find(t=>t.id===deleteId):null;
 
   useEffect(()=>{requestNotifPermission();},[]);
   useEffect(()=>{
@@ -366,6 +368,23 @@ function App(){
         .empty{text-align:center;color:#3A3A45;font-size:12px;letter-spacing:.1em;padding:48px 0;}
       `}</style>
 
+      {/* Delete confirm dialog */}
+      {deleteId && deleteTodo_target && (
+        <div className="conf-ov" onClick={()=>setDeleteId(null)}>
+          <div className="conf-box" onClick={e=>e.stopPropagation()}>
+            <div className="conf-ico">🗑️</div>
+            <div className="conf-ttl">タスクを削除しますか？</div>
+            <div className="conf-sub" style={{color:"#E8A0AA"}}>この操作は取り消せません。</div>
+            <div className="conf-task">{deleteTodo_target.text}</div>
+            <div className="conf-btns">
+              <button className="conf-btn cl" onClick={()=>setDeleteId(null)}>キャンセル</button>
+              <button className="conf-btn" style={{background:"#E8A0AA",color:"#1C1C1F"}}
+                onClick={()=>{deleteTodo(deleteId);setDeleteId(null);}}>削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirm dialog */}
       {confirmId && confirmTodo && (
         <div className="conf-ov" onClick={()=>setConfirmId(null)}>
@@ -529,7 +548,7 @@ function App(){
                   </div>
                   <button className="exp-btn" onClick={()=>setExpandedId(isExp?null:t.id)}>{isExp?"▲":"▼"}</button>
                   <button className="act-btn" onClick={()=>startEdit(t)}>✎</button>
-                  <button className="act-btn del" onClick={()=>deleteTodo(t.id)}>✕</button>
+                  <button className="act-btn del" onClick={()=>setDeleteId(t.id)}>✕</button>
                 </div>
 
                 {rp&&!t.done&&!isExp&&(
