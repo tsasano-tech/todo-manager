@@ -246,7 +246,7 @@ const REPEATS = [
 // ── State ──
 let todos = [];
 let state = {
-  filter:'未完了', cat:'すべて', sort:'due',
+  filter:'未完了', cat:'すべて', sort:'priority_due',
   input:'', selCat:'work', selPri:'mid', due:'', memo:'', reminder:'none', repeat:'none', bizDay:1, monthDay:1, showAdv:false,
   expanded:null, editing:null, editData:{},
 };
@@ -440,6 +440,14 @@ function getFiltered(){
     .sort((a,b)=>{
       if(state.sort==='priority'){const o={high:0,mid:1,low:2};return o[a.priority]-o[b.priority];}
       if(state.sort==='due'){if(!a.due&&!b.due)return 0;if(!a.due)return 1;if(!b.due)return -1;return a.due.localeCompare(b.due);}
+      if(state.sort==='priority_due'){
+        const o={high:0,mid:1,low:2};
+        const pd=o[a.priority]-o[b.priority];if(pd!==0)return pd;
+        if(!a.due&&!b.due)return b.id-a.id;
+        if(!a.due)return 1;if(!b.due)return -1;
+        const dd=a.due.localeCompare(b.due);if(dd!==0)return dd;
+        return b.id-a.id;
+      }
       return b.id-a.id;
     });
 }
@@ -505,6 +513,7 @@ function render(){
       ${[{id:'すべて',label:'すべて',color:null},...CATS].map(c=>`<button class="cat-flt-btn" style="${state.cat===c.id?`background:${c.color||'#F0EDE8'};border-color:${c.color||'#F0EDE8'};color:#1C1C1F`:''}" onclick="setActiveCat('${c.id}')">${c.label}</button>`).join('')}
     </div>
     <select class="srt-sel" onchange="state.sort=this.value;render()">
+      <option value="priority_due"${state.sort==='priority_due'?' selected':''}>優先度→期限順</option>
       <option value="created"${state.sort==='created'?' selected':''}>作成順</option>
       <option value="priority"${state.sort==='priority'?' selected':''}>優先度順</option>
       <option value="due"${state.sort==='due'?' selected':''}>期限順</option>
