@@ -39,9 +39,10 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .prog-fill::after{content:'';position:absolute;right:0;top:50%;transform:translateY(-50%);width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);}
 
 /* ── IO bar ── */
-.io-bar{display:flex;gap:8px;margin-bottom:18px;}
-.io-btn{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;}
-.io-btn:active{background:#2E2E38;}
+.io-bar{display:flex;gap:12px;justify-content:flex-end;margin-bottom:16px;}
+.io-btn{padding:4px 10px;border-radius:20px;border:1px solid #2A2A32;background:transparent;color:#3A3A48;font-size:10px;cursor:pointer;font-family:inherit;letter-spacing:.06em;transition:all .2s;}
+.io-btn:hover{color:#6A6A7A;border-color:#3A3A48;}
+.io-btn:active{color:#A0A0B0;}
 
 /* ── Section label ── */
 .sec-lbl{font-size:10px;letter-spacing:.2em;color:var(--text3);text-transform:uppercase;margin-bottom:10px;}
@@ -84,7 +85,12 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .td-list{display:flex;flex-direction:column;gap:4px;}
 .td-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .td-card.done{opacity:.4;}
-.td-card.overdue{border-left:3px solid var(--accent2);}
+.td-card.overdue{border:1px solid #E8A0AA55;border-left:3px solid var(--accent2);background:#2A1F20;}
+.td-card.overdue .td-txt{color:#F0C0C4;}
+.td-card.overdue:hover{background:#2E2122;}
+.td-card.soon{border:1px solid #F7DC6F44;border-left:3px solid var(--accent3);background:#252218;}
+.td-card.soon .td-txt{color:#F0E0A0;}
+.td-card.soon:hover{background:#2A2520;}
 .td-main{display:flex;align-items:center;gap:11px;padding:13px 13px;}
 .chk-btn{width:22px;height:22px;border-radius:50%;border:1.5px solid #484858;background:transparent;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:transparent;font-family:inherit;}
 .chk-btn.on{border-color:transparent;color:var(--bg);}
@@ -212,7 +218,6 @@ const STORAGE_KEY = 'claude-todo-manager-v1';
 const CATS = [
   {id:'work',    label:'仕事',   color:'#E8B4B8'},
   {id:'personal',label:'個人',   color:'#A8D8EA'},
-  {id:'urgent',  label:'緊急',   color:'#F7DC6F'},
   {id:'other',   label:'その他', color:'#ABEBC6'},
 ];
 const PRIS = [
@@ -230,19 +235,19 @@ const REMINDERS = [
   {id:'1w',  label:'1週間前',mins:10080},
 ];
 const REPEATS = [
-  {id:'none',   label:'繰り返しなし'},
-  {id:'daily',  label:'毎日'},
-  {id:'weekly', label:'毎週'},
-  {id:'monthly',label:'毎月'},
-  {id:'bizdays',label:'毎月●営業日'},
-  {id:'yearly', label:'毎年'},
+  {id:'none',      label:'繰り返しなし'},
+  {id:'daily',     label:'毎日'},
+  {id:'weekly',    label:'毎週'},
+  {id:'monthly',   label:'毎月'},
+  {id:'monthday',  label:'毎月●日'},
+  {id:'bizdays',   label:'毎月●営業日'},
 ];
 
 // ── State ──
 let todos = [];
 let state = {
-  filter:'すべて', cat:'すべて', sort:'created',
-  input:'', selCat:'work', selPri:'mid', due:'', memo:'', reminder:'none', repeat:'none', bizDay:1, showAdv:false,
+  filter:'未完了', cat:'すべて', sort:'due',
+  input:'', selCat:'work', selPri:'mid', due:'', memo:'', reminder:'none', repeat:'none', bizDay:1, monthDay:1, showAdv:false,
   expanded:null, editing:null, editData:{},
 };
 let notifTimers = {};
@@ -251,13 +256,7 @@ let notifTimers = {};
 function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(todos));}catch(e){}}
 function load(){
   try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0){todos=p;return;}}}catch(e){}
-  const t=new Date(),fmt=d=>d.toISOString().split('T')[0];
-  const ad=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return fmt(x);};
-  todos=[
-    {id:1,text:'プロジェクト資料を作成する',category:'work',priority:'high',due:ad(t,2),memo:'スライド20枚',done:false,reminder:'1d',reminderTime:calcRT(ad(t,2),'1d'),repeat:'none'},
-    {id:2,text:'週次レポートを提出',category:'urgent',priority:'high',due:fmt(t),memo:'',done:false,reminder:'30m',reminderTime:calcRT(fmt(t),'30m'),repeat:'weekly'},
-    {id:4,text:'家賃の支払い',category:'personal',priority:'high',due:ad(t,5),memo:'口座振替確認',done:false,reminder:'3d',reminderTime:calcRT(ad(t,5),'3d'),repeat:'monthly'},
-  ];
+  todos=[];
 }
 
 // ── Date helpers ──
@@ -289,7 +288,7 @@ function getNthBiz(y,m,n){
     if(d.getMonth()!==m){const l=new Date(y,m+1,0);while(!isWeekday(l))l.setDate(l.getDate()-1);return l;}
   }
 }
-function advanceDue(due,repeat,bizDay){
+function advanceDue(due,repeat,bizDay,monthDay){
   if(!due||repeat==='none')return due;
   const d=new Date(due);
   if(repeat==='bizdays'){
@@ -297,15 +296,26 @@ function advanceDue(due,repeat,bizDay){
     const ny=d.getMonth()+1>11?d.getFullYear()+1:d.getFullYear();
     return fmt(getNthBiz(ny,nm,bizDay||1));
   }
+  if(repeat==='monthday'){
+    // Advance to same day next month
+    const day=monthDay||d.getDate();
+    const nm=d.getMonth()+1>11?0:d.getMonth()+1;
+    const ny=d.getMonth()+1>11?d.getFullYear()+1:d.getFullYear();
+    const next=new Date(ny,nm,day);
+    // Clamp to last day of month if day exceeds month length
+    if(next.getMonth()!==nm){next.setDate(0);}
+    return fmt(next);
+  }
   if(repeat==='daily')  d.setDate(d.getDate()+1);
   if(repeat==='weekly') d.setDate(d.getDate()+7);
   if(repeat==='monthly')d.setMonth(d.getMonth()+1);
   if(repeat==='yearly') d.setFullYear(d.getFullYear()+1);
   return fmt(d);
 }
-function repeatLabel(repeat,bizDay){
+function repeatLabel(repeat,bizDay,monthDay){
   if(!repeat||repeat==='none')return null;
   if(repeat==='bizdays')return bizDay?`毎月第${bizDay}営業日`:'毎月●営業日';
+  if(repeat==='monthday')return monthDay?`毎月${monthDay}日`:'毎月●日';
   return(REPEATS.find(r=>r.id===repeat)||{}).label||null;
 }
 function reminderLabel(todo){
@@ -357,8 +367,8 @@ function addTodo(){
   if(!text)return;
   const newId=todos.reduce((mx,t)=>Math.max(mx,t.id),0)+1;
   const rt=calcRT(state.due,state.reminder);
-  todos.unshift({id:newId,text,category:state.selCat,priority:state.selPri,due:state.due,memo:state.memo.trim(),done:false,reminder:state.reminder,reminderTime:rt,repeat:state.repeat,bizDay:state.repeat==='bizdays'?state.bizDay:null});
-  state.input='';state.due='';state.memo='';state.reminder='none';state.repeat='none';state.bizDay=1;state.showAdv=false;
+  todos.unshift({id:newId,text,category:state.selCat,priority:state.selPri,due:state.due,memo:state.memo.trim(),done:false,reminder:state.reminder,reminderTime:rt,repeat:state.repeat,bizDay:state.repeat==='bizdays'?state.bizDay:null,monthDay:state.repeat==='monthday'?state.monthDay:null});
+  state.input='';state.due='';state.memo='';state.reminder='none';state.repeat='none';state.bizDay=1;state.monthDay=1;state.showAdv=false;
   save();scheduleNotifs();render();
   document.getElementById('txt-inp').focus();
 }
@@ -373,7 +383,7 @@ function doComplete(id){
   todos=todos.map(t=>{
     if(t.id!==id)return t;
     if(!t.done&&t.repeat&&t.repeat!=='none'&&t.due){
-      const nextDue=advanceDue(t.due,t.repeat,t.bizDay);
+      const nextDue=advanceDue(t.due,t.repeat,t.bizDay,t.monthDay);
       return{...t,done:true,nextDue,reminderTime:calcRT(nextDue,t.reminder)};
     }
     return{...t,done:!t.done};
@@ -390,13 +400,13 @@ function toggleExpand(id){state.expanded=state.expanded===id?null:id;render();}
 function startEdit(id){
   const t=todos.find(x=>x.id===id);if(!t)return;
   state.editing=id;state.expanded=id;
-  state.editData={text:t.text,priority:t.priority,due:t.due||'',memo:t.memo||'',category:t.category,reminder:t.reminder||'none',repeat:t.repeat||'none',bizDay:t.bizDay||1};
+  state.editData={text:t.text,priority:t.priority,due:t.due||'',memo:t.memo||'',category:t.category,reminder:t.reminder||'none',repeat:t.repeat||'none',bizDay:t.bizDay||1,monthDay:t.monthDay||1};
   render();
 }
 function saveEdit(){
   if(!state.editData.text?.trim())return;
   const rt=calcRT(state.editData.due,state.editData.reminder);
-  todos=todos.map(t=>t.id===state.editing?{...t,...state.editData,text:state.editData.text.trim(),reminderTime:rt,bizDay:state.editData.repeat==='bizdays'?(state.editData.bizDay||1):null}:t);
+  todos=todos.map(t=>t.id===state.editing?{...t,...state.editData,text:state.editData.text.trim(),reminderTime:rt,bizDay:state.editData.repeat==='bizdays'?(state.editData.bizDay||1):null,monthDay:state.editData.repeat==='monthday'?(state.editData.monthDay||1):null}:t);
   state.editing=null;save();scheduleNotifs();render();
 }
 function cancelEdit(){state.editing=null;render();}
@@ -455,7 +465,7 @@ function render(){
     <div class="prog"><div class="prog-fill" style="width:${prog}%"></div></div>
   </div>
 
-  <div class="io-bar" style="display:none">
+  <div class="io-bar">
     <button class="io-btn" onclick="openExport()">📤 エクスポート</button>
     <button class="io-btn" onclick="openModal('modal-import')">📥 インポート</button>
   </div>
@@ -480,6 +490,7 @@ function render(){
         <div style="flex:1">
           <div style="display:flex;gap:6px;flex-wrap:wrap">${optChipHTML(REPEATS,state.repeat,'setRepeat')}</div>
           ${state.repeat==='bizdays'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="23" value="${state.bizDay}" onfocus="this.select()" oninput="state.bizDay=Math.max(1,Math.min(23,parseInt(this.value)||1))" onblur="if(!this.value||isNaN(parseInt(this.value)))this.value=state.bizDay=1"/><span style="color:var(--text3);font-size:12px">営業日目</span></div>`:''}
+          ${state.repeat==='monthday'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="31" value="${state.monthDay}" onfocus="this.select()" oninput="state.monthDay=Math.max(1,Math.min(31,parseInt(this.value)||1))" onblur="if(!this.value||isNaN(parseInt(this.value)))this.value=state.monthDay=1"/><span style="color:var(--text3);font-size:12px">日</span></div>`:''}
         </div>
       </div>
       <div class="fld-row"><span class="fld-lbl">メモ</span><textarea class="memo-inp" rows="2" placeholder="メモを追加..." oninput="state.memo=this.value">${esc(state.memo)}</textarea></div>
@@ -512,7 +523,7 @@ function renderTodo(t){
   const pri=PRIS.find(p=>p.id===t.priority)||PRIS[1];
   const ds=deadlineStatus(t.due);
   const rl=reminderLabel(t);
-  const rp=repeatLabel(t.repeat,t.bizDay);
+  const rp=repeatLabel(t.repeat,t.bizDay,t.monthDay);
   const isExp=state.expanded===t.id;
   const isEdt=state.editing===t.id;
 
@@ -538,6 +549,7 @@ function renderTodo(t){
           <div style="flex:1">
             <div style="display:flex;gap:6px;flex-wrap:wrap">${optChipHTML(REPEATS,ed.repeat,'setEditRepeat')}</div>
             ${ed.repeat==='bizdays'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="23" value="${ed.bizDay||1}" onfocus="this.select()" oninput="state.editData.bizDay=Math.max(1,Math.min(23,parseInt(this.value)||1))" onblur="if(!this.value)this.value=state.editData.bizDay=1"/><span style="color:var(--text3);font-size:12px">営業日目</span></div>`:''}
+            ${ed.repeat==='monthday'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="31" value="${ed.monthDay||1}" onfocus="this.select()" oninput="state.editData.monthDay=Math.max(1,Math.min(31,parseInt(this.value)||1))" onblur="if(!this.value)this.value=state.editData.monthDay=1"/><span style="color:var(--text3);font-size:12px">日</span></div>`:''}
           </div>
         </div>
         <div class="exp-fld"><span class="exp-lbl">メモ</span><textarea class="exp-memo-inp" rows="3" oninput="state.editData.memo=this.value">${esc(ed.memo||'')}</textarea></div>
@@ -547,7 +559,7 @@ function renderTodo(t){
         </div>
       </div>`;
     } else {
-      const nextStr=rp&&!t.done&&t.due?`<small class="dim">→ 次: ${advanceDue(t.due,t.repeat,t.bizDay)}</small>`:'';
+      const nextStr=rp&&!t.done&&t.due?`<small class="dim">→ 次: ${advanceDue(t.due,t.repeat,t.bizDay,t.monthDay)}</small>`:'';
       const nextDoneStr=rp&&t.done&&t.nextDue?`<small class="dim">次回表示: ${t.nextDue}の10日前</small>`:'';
       const rtStr=t.reminderTime?`<small class="dim">${new Date(t.reminderTime).toLocaleString('ja-JP',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small>`:'';
       panel=`<div class="exp-panel">
@@ -561,7 +573,8 @@ function renderTodo(t){
     }
   }
 
-  return `<div class="td-card${t.done?' done':''}${ds?.urgent&&!t.done?' overdue':''}">
+  const soonClass = !t.done && ds && !ds.urgent && ds.color === '#F7DC6F' ? ' soon' : '';
+  return `<div class="td-card${t.done?' done':''}${ds?.urgent&&!t.done?' overdue':''}${soonClass}">
     <div class="td-main">
       <button class="chk-btn${t.done?' on':''}" style="${t.done?`background:${cat.color}`:'color:transparent'}" onclick="${t.done?'doComplete':'confirmComplete'}(${t.id})">${t.done?'✓':''}</button>
       <div class="cat-dot" style="background:${cat.color}"></div>
