@@ -10,6 +10,21 @@
 <title>TODO Manager</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAQvg0VYK2MrHOP46FVkgDNcQfgS9pgBpY",
+  authDomain: "todo-manager-cfe8d.firebaseapp.com",
+  projectId: "todo-manager-cfe8d",
+  storageBucket: "todo-manager-cfe8d.firebasestorage.app",
+  messagingSenderId: "96357034204",
+  appId: "1:96357034204:web:d944b122e0974c11adac19"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const DOC_REF = db.collection('users').doc('tsasano');
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 :root{
@@ -252,11 +267,30 @@ let state = {
 };
 let notifTimers = {};
 
-// ── Persistence ──
-function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(todos));}catch(e){}}
+// ── Persistence (Firestore + localStorage fallback) ──
+function save(){
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(todos));}catch(e){}
+  try{DOC_REF.set({todos:JSON.stringify(todos)});}catch(e){}
+}
 function load(){
-  try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0){todos=p;return;}}}catch(e){}
-  todos=[];
+  // まずlocalStorageから読み込んで即表示
+  try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0){todos=p;}}}catch(e){}
+  render();
+  // Firestoreから最新データを取得して上書き
+  try{
+    DOC_REF.get().then(doc=>{
+      if(doc.exists&&doc.data().todos){
+        const p=JSON.parse(doc.data().todos);
+        if(Array.isArray(p)&&p.length>0){
+          todos=p;
+          try{localStorage.setItem(STORAGE_KEY,JSON.stringify(todos));}catch(e){}
+          checkResurface();
+          scheduleNotifs();
+          render();
+        }
+      }
+    }).catch(e=>console.log('Firestore load error:',e));
+  }catch(e){}
 }
 
 // ── Date helpers ──
@@ -616,12 +650,11 @@ function setEditReminder(r){state.editData.reminder=r;render();}
 function setEditRepeat(r){state.editData.repeat=r;render();}
 
 // ── Init ──
-load();
 requestNotif();
+load(); // loadの中でrender()も呼ばれる
 checkResurface();
 setInterval(checkResurface,3600000);
 scheduleNotifs();
-render();
 </script>
 </body>
 </html>
