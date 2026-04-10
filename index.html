@@ -8,8 +8,21 @@
 <meta name="apple-mobile-web-app-title" content="TODO"/>
 <meta name="theme-color" content="#1C1C1F"/>
 <title>TODO Manager</title>
+
+<!-- PWA manifest -->
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const m={name:"TODO Manager",short_name:"TODO",start_url:".",display:"standalone",background_color:"#1C1C1F",theme_color:"#1C1C1F",icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%231C1C1F'/%3E%3Ctext y='140' x='96' text-anchor='middle' font-size='120' font-family='serif'%3E%F0%9F%93%8B%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml"}]};
+  const el=document.createElement('link');el.rel='manifest';
+  el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
+  document.head.appendChild(el);
+});
+</script>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%231C1C1F'/%3E%3Ctext y='130' x='90' text-anchor='middle' font-size='100' font-family='serif'%3E%F0%9F%93%8B%3C/text%3E%3C/svg%3E"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
@@ -23,8 +36,9 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-const DOC_REF = db.collection('users').doc('tsasano');
+const DOC_REF = db.collection('todos').doc('sasano');
 </script>
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 :root{
@@ -36,11 +50,14 @@ const DOC_REF = db.collection('users').doc('tsasano');
 }
 html,body{background:var(--bg);font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;min-height:100vh;overflow-x:hidden;}
 body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
-
-/* ── App wrapper ── */
 #app{max-width:700px;margin:0 auto;padding:48px 18px 100px;}
-
-/* ── Header ── */
+.sync-bar{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:12px;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#3A3A45;flex-shrink:0;}
+.sync-dot.ok{background:var(--accent4);}
+.sync-dot.err{background:var(--accent2);}
+.sync-dot.loading{background:var(--accent3);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sync-lbl{font-size:10px;color:var(--text3);}
 .hdr{margin-bottom:32px;}
 .hdr-top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;}
 .t-sub{font-family:'Noto Serif JP',serif;font-size:11px;font-weight:300;letter-spacing:.4em;color:var(--text3);text-transform:uppercase;}
@@ -52,17 +69,7 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .prog{height:2px;background:#2E2E35;border-radius:2px;position:relative;overflow:visible;}
 .prog-fill{height:2px;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:2px;transition:width .6s cubic-bezier(.4,0,.2,1);position:relative;}
 .prog-fill::after{content:'';position:absolute;right:0;top:50%;transform:translateY(-50%);width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);}
-
-/* ── IO bar ── */
-.io-bar{display:flex;gap:12px;justify-content:flex-end;margin-bottom:16px;}
-.io-btn{padding:4px 10px;border-radius:20px;border:1px solid #2A2A32;background:transparent;color:#3A3A48;font-size:10px;cursor:pointer;font-family:inherit;letter-spacing:.06em;transition:all .2s;}
-.io-btn:hover{color:#6A6A7A;border-color:#3A3A48;}
-.io-btn:active{color:#A0A0B0;}
-
-/* ── Section label ── */
 .sec-lbl{font-size:10px;letter-spacing:.2em;color:var(--text3);text-transform:uppercase;margin-bottom:10px;}
-
-/* ── Input area ── */
 .inp-area{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:18px;display:flex;flex-direction:column;gap:11px;}
 .inp-row{display:flex;gap:10px;align-items:center;}
 .txt-inp{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:15px;font-family:inherit;caret-color:var(--accent);}
@@ -79,14 +86,9 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .dt-inp::-webkit-calendar-picker-indicator{filter:invert(.5);}
 .memo-inp{flex:1;background:transparent;border:none;border-bottom:1px solid var(--border2);color:#B0ACA8;font-size:12px;font-family:inherit;outline:none;padding:3px 0;caret-color:var(--accent);resize:none;min-height:24px;line-height:1.5;}
 .memo-inp::placeholder{color:#404048;}
-
-/* ── Chips ── */
-.chip{font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid transparent;cursor:pointer;background:transparent;font-family:inherit;transition:all .15s;}
-.chip.on{border-color:currentColor;}
+.chip{font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid transparent;cursor:pointer;background:transparent;font-family:inherit;}
 .chip-opt{font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid #383840;cursor:pointer;background:transparent;color:var(--text3);white-space:nowrap;font-family:inherit;}
 .chip-opt.on{background:#2E2E38;color:#D0CCC8;border-color:#58586A;}
-
-/* ── Filters ── */
 .flt-row{display:flex;border-bottom:1px solid #2E2E35;margin-bottom:8px;}
 .flt-btn{font-size:12px;padding:8px 14px;background:transparent;border:none;color:#5A5A6A;cursor:pointer;font-family:inherit;position:relative;}
 .flt-btn.on{color:var(--text);}
@@ -95,8 +97,6 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .cat-flt-row{display:flex;gap:6px;flex-wrap:wrap;}
 .cat-flt-btn{font-size:11px;padding:5px 11px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;font-family:inherit;}
 .srt-sel{background:var(--bg3);border:1px solid var(--border2);color:var(--text3);font-size:11px;padding:5px 8px;border-radius:6px;outline:none;font-family:inherit;}
-
-/* ── Todo list ── */
 .td-list{display:flex;flex-direction:column;gap:4px;}
 .td-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .td-card.done{opacity:.4;}
@@ -119,8 +119,6 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .memo-prev{font-size:11px;color:#585868;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
 .exp-btn{background:transparent;border:none;color:#484858;font-size:11px;cursor:pointer;padding:4px 5px;flex-shrink:0;font-family:inherit;}
 .act-btn{background:transparent;border:none;color:#484858;cursor:pointer;font-size:14px;padding:4px 5px;line-height:1;font-family:inherit;}
-
-/* ── Expanded panel ── */
 .exp-panel{border-top:1px solid #2E2E35;padding:13px;display:flex;flex-direction:column;gap:11px;background:var(--bg4);}
 .exp-fld{display:flex;gap:10px;align-items:flex-start;}
 .exp-lbl{font-size:10px;letter-spacing:.1em;color:#5A5A6A;width:46px;flex-shrink:0;padding-top:3px;}
@@ -131,12 +129,8 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .exp-dt::-webkit-calendar-picker-indicator{filter:invert(.5);}
 .exp-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:2px;}
 .exp-memo-inp{flex:1;background:transparent;border:none;border-bottom:1px solid #3A3A45;color:#D0CCC8;font-size:12px;font-family:inherit;outline:none;padding:2px 0 3px;caret-color:var(--accent);resize:none;line-height:1.5;}
-
-/* ── Repeat info ── */
 .rpt-info{display:flex;align-items:center;gap:6px;padding:6px 11px;background:#1A2E22;border:1px solid #2A4535;}
 .rpt-info-t{font-size:11px;color:var(--accent4);}
-
-/* ── Modal overlay ── */
 .modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px);}
 .modal-ov.show{display:flex;animation:fdi .15s ease;}
 @keyframes fdi{from{opacity:0}to{opacity:1}}
@@ -152,17 +146,12 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .mbtn.ok{background:var(--text);color:var(--bg);}
 .mbtn.ok:active{background:var(--accent);}
 .mbtn.danger{background:var(--accent2);color:var(--bg);}
-.io-ta{width:100%;height:110px;background:#1C1C1F;border:1px solid #3A3A44;border-radius:6px;color:#C0C0C0;font-size:11px;font-family:'DM Mono',monospace;padding:10px;outline:none;resize:none;line-height:1.4;margin-bottom:4px;}
-.io-msg{text-align:center;font-size:13px;margin-top:6px;min-height:18px;}
-
-/* ── Toast ── */
 .toast-wrap{position:fixed;bottom:24px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none;}
 .toast{background:var(--bg3);border:1px solid #3A3A44;border-left:3px solid var(--accent3);border-radius:8px;padding:12px 14px;min-width:210px;max-width:290px;pointer-events:all;animation:sli .3s ease;}
 @keyframes sli{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
 .toast-cl{float:right;background:transparent;border:none;color:#6A6A7A;cursor:pointer;font-size:14px;margin-left:8px;font-family:inherit;}
 .toast-ttl{font-size:11px;color:var(--accent3);margin-bottom:3px;}
 .toast-txt{font-size:13px;color:#E0DDD8;line-height:1.4;}
-
 .biz-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
 .biz-inp{width:52px;background:#1C1C1F;border:1px solid #3A3A44;border-radius:4px;color:#D0CCC8;font-size:13px;padding:4px 8px;outline:none;text-align:center;font-family:'DM Mono',monospace;}
 .empty{text-align:center;color:var(--text4);font-size:12px;letter-spacing:.1em;padding:48px 0;}
@@ -170,7 +159,7 @@ small.dim{color:#555;font-size:11px;margin-left:8px;font-family:'DM Mono',monosp
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><div style="text-align:center;padding:80px 20px;color:#6A6A7A;font-size:14px;">読み込み中...</div></div>
 
 <!-- Modals -->
 <div class="modal-ov" id="modal-complete">
@@ -182,6 +171,18 @@ small.dim{color:#555;font-size:11px;margin-left:8px;font-family:'DM Mono',monosp
     <div class="modal-btns">
       <button class="mbtn cancel" onclick="closeModal('modal-complete')">キャンセル</button>
       <button class="mbtn ok" id="mc-ok">完了にする</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-uncomplete">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-ico">↩️</div>
+    <div class="modal-ttl">未完了に戻しますか？</div>
+    <div class="modal-task" id="mu-task"></div>
+    <div class="modal-btns">
+      <button class="mbtn cancel" onclick="closeModal('modal-uncomplete')">キャンセル</button>
+      <button class="mbtn ok" id="mu-ok">未完了に戻す</button>
     </div>
   </div>
 </div>
@@ -199,37 +200,9 @@ small.dim{color:#555;font-size:11px;margin-left:8px;font-family:'DM Mono',monosp
   </div>
 </div>
 
-<div class="modal-ov" id="modal-export">
-  <div class="modal-box" onclick="event.stopPropagation()">
-    <div class="modal-ico">📤</div>
-    <div class="modal-ttl">エクスポート</div>
-    <div class="modal-sub">下のテキストを全選択してコピーし、<br/>移行先のインポートに貼り付けてください</div>
-    <textarea class="io-ta" id="export-ta" readonly onfocus="this.select()"></textarea>
-    <div class="modal-btns">
-      <button class="mbtn cancel" onclick="closeModal('modal-export')">閉じる</button>
-      <button class="mbtn ok" onclick="copyExport()">コピー</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-ov" id="modal-import">
-  <div class="modal-box" onclick="event.stopPropagation()">
-    <div class="modal-ico">📥</div>
-    <div class="modal-ttl">インポート</div>
-    <div class="modal-sub">エクスポートしたテキストを<br/>下に貼り付けてください</div>
-    <textarea class="io-ta" id="import-ta" placeholder="ここにペースト..."></textarea>
-    <div class="io-msg" id="import-msg"></div>
-    <div class="modal-btns">
-      <button class="mbtn cancel" onclick="closeModal('modal-import')">キャンセル</button>
-      <button class="mbtn ok" onclick="doImport()">インポート</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script>
-const STORAGE_KEY = 'claude-todo-manager-v1';
 const CATS = [
   {id:'work',    label:'仕事',   color:'#E8B4B8'},
   {id:'personal',label:'個人',   color:'#A8D8EA'},
@@ -250,48 +223,67 @@ const REMINDERS = [
   {id:'1w',  label:'1週間前',mins:10080},
 ];
 const REPEATS = [
-  {id:'none',      label:'繰り返しなし'},
-  {id:'daily',     label:'毎日'},
-  {id:'weekly',    label:'毎週'},
-  {id:'monthly',   label:'毎月'},
-  {id:'monthday',  label:'毎月●日'},
-  {id:'bizdays',   label:'毎月●営業日'},
+  {id:'none',     label:'繰り返しなし'},
+  {id:'daily',    label:'毎日'},
+  {id:'weekly',   label:'毎週'},
+  {id:'monthly',  label:'毎月'},
+  {id:'monthday', label:'毎月●日'},
+  {id:'bizdays',  label:'毎月●営業日'},
 ];
 
-// ── State ──
 let todos = [];
+let syncStatus = 'loading'; // loading / ok / err
 let state = {
   filter:'未完了', cat:'すべて', sort:'priority_due',
-  input:'', selCat:'work', selPri:'mid', due:'', memo:'', reminder:'none', repeat:'none', bizDay:1, monthDay:1, showAdv:false,
+  input:'', selCat:'work', selPri:'mid', due:'', memo:'', reminder:'none',
+  repeat:'none', bizDay:1, monthDay:1, showAdv:false,
   expanded:null, editing:null, editData:{},
 };
 let notifTimers = {};
 
-// ── Persistence (Firestore + localStorage fallback) ──
-function save(){
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(todos));}catch(e){}
-  try{DOC_REF.set({todos:JSON.stringify(todos)});}catch(e){}
+// ── Firebase sync ──
+function saveToFirebase(){
+  syncStatus='loading';renderSyncBar();
+  DOC_REF.set({todos:JSON.stringify(todos),updatedAt:new Date().toISOString()})
+    .then(()=>{syncStatus='ok';renderSyncBar();})
+    .catch(()=>{syncStatus='err';renderSyncBar();});
 }
-function load(){
-  // まずlocalStorageから読み込んで即表示
-  try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0){todos=p;}}}catch(e){}
-  render();
-  // Firestoreから最新データを取得して上書き
-  try{
-    DOC_REF.get().then(doc=>{
-      if(doc.exists&&doc.data().todos){
-        const p=JSON.parse(doc.data().todos);
-        if(Array.isArray(p)&&p.length>0){
-          todos=p;
-          try{localStorage.setItem(STORAGE_KEY,JSON.stringify(todos));}catch(e){}
-          checkResurface();
-          scheduleNotifs();
-          render();
-        }
+
+function loadFromFirebase(){
+  syncStatus='loading';renderSyncBar();
+  DOC_REF.get().then(doc=>{
+    if(doc.exists){
+      try{
+        const data=JSON.parse(doc.data().todos);
+        if(Array.isArray(data)){todos=data;}
+      }catch(e){}
+    }
+    syncStatus='ok';
+    checkResurface();
+    scheduleNotifs();
+    render();
+  }).catch(()=>{
+    syncStatus='err';
+    render();
+  });
+}
+
+// リアルタイム同期（他のデバイスで変更があれば自動反映）
+DOC_REF.onSnapshot(doc=>{
+  if(doc.exists&&doc.metadata.hasPendingWrites===false){
+    try{
+      const data=JSON.parse(doc.data().todos);
+      if(Array.isArray(data)){
+        todos=data;
+        syncStatus='ok';
+        renderSyncBar();
+        render();
       }
-    }).catch(e=>console.log('Firestore load error:',e));
-  }catch(e){}
-}
+    }catch(e){}
+  }
+});
+
+function save(){saveToFirebase();}
 
 // ── Date helpers ──
 function fmt(d){return d.toISOString().split('T')[0];}
@@ -331,19 +323,16 @@ function advanceDue(due,repeat,bizDay,monthDay){
     return fmt(getNthBiz(ny,nm,bizDay||1));
   }
   if(repeat==='monthday'){
-    // Advance to same day next month
     const day=monthDay||d.getDate();
     const nm=d.getMonth()+1>11?0:d.getMonth()+1;
     const ny=d.getMonth()+1>11?d.getFullYear()+1:d.getFullYear();
     const next=new Date(ny,nm,day);
-    // Clamp to last day of month if day exceeds month length
     if(next.getMonth()!==nm){next.setDate(0);}
     return fmt(next);
   }
   if(repeat==='daily')  d.setDate(d.getDate()+1);
   if(repeat==='weekly') d.setDate(d.getDate()+7);
   if(repeat==='monthly')d.setMonth(d.getMonth()+1);
-  if(repeat==='yearly') d.setFullYear(d.getFullYear()+1);
   return fmt(d);
 }
 function repeatLabel(repeat,bizDay,monthDay){
@@ -356,8 +345,6 @@ function reminderLabel(todo){
   if(!todo.reminder||todo.reminder==='none')return null;
   return(REMINDERS.find(r=>r.id===todo.reminder)||{}).label||null;
 }
-
-// ── Notifications ──
 function requestNotif(){if(typeof Notification!=='undefined'&&Notification.permission==='default')Notification.requestPermission();}
 function scheduleNotifs(){
   Object.values(notifTimers).forEach(clearTimeout);notifTimers={};
@@ -376,8 +363,6 @@ function showToast(text){
   el.innerHTML=`<button class="toast-cl" onclick="this.parentElement.remove()">✕</button><div class="toast-ttl">🔔 リマインダー</div><div class="toast-txt">${text}</div>`;
   w.appendChild(el);setTimeout(()=>el.remove(),8000);
 }
-
-// ── Auto-resurface ──
 function checkResurface(){
   const now=new Date();now.setHours(0,0,0,0);
   let changed=false;
@@ -389,13 +374,10 @@ function checkResurface(){
   });
   if(changed){save();render();}
 }
-
-// ── Modal helpers ──
 function openModal(id){document.getElementById(id).classList.add('show');}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 document.querySelectorAll('.modal-ov').forEach(m=>m.addEventListener('click',()=>m.classList.remove('show')));
 
-// ── Actions ──
 function addTodo(){
   const text=state.input.trim();
   if(!text)return;
@@ -412,6 +394,12 @@ function confirmComplete(id){
   document.getElementById('mc-sub').textContent=t.repeat&&t.repeat!=='none'?'🔁 繰り返しタスクです。完了にすると次の期限に自動更新されます。':'';
   document.getElementById('mc-ok').onclick=()=>{doComplete(id);closeModal('modal-complete');};
   openModal('modal-complete');
+}
+function confirmUncomplete(id){
+  const t=todos.find(x=>x.id===id);if(!t)return;
+  document.getElementById('mu-task').textContent=t.text;
+  document.getElementById('mu-ok').onclick=()=>{doComplete(id);closeModal('modal-uncomplete');};
+  openModal('modal-uncomplete');
 }
 function doComplete(id){
   todos=todos.map(t=>{
@@ -444,26 +432,9 @@ function saveEdit(){
   state.editing=null;save();scheduleNotifs();render();
 }
 function cancelEdit(){state.editing=null;render();}
+function getCat(id){return CATS.find(c=>c.id===id)||CATS[0];}
+function getPri(id){return PRIS.find(p=>p.id===id)||PRIS[1];}
 
-// ── Export / Import ──
-function openExport(){document.getElementById('export-ta').value=JSON.stringify(todos,null,2);openModal('modal-export');}
-function copyExport(){
-  const ta=document.getElementById('export-ta');ta.select();
-  try{document.execCommand('copy');}catch(e){}
-  if(navigator.clipboard)navigator.clipboard.writeText(ta.value);
-}
-function doImport(){
-  const msg=document.getElementById('import-msg');
-  try{
-    const p=JSON.parse(document.getElementById('import-ta').value);
-    if(!Array.isArray(p))throw new Error();
-    todos=p;save();render();
-    msg.style.color='var(--accent4)';msg.textContent='✅ インポート完了！';
-    setTimeout(()=>{closeModal('modal-import');msg.textContent='';document.getElementById('import-ta').value='';},1500);
-  }catch(e){msg.style.color='var(--accent2)';msg.textContent='❌ データが正しくありません';}
-}
-
-// ── Render ──
 function getFiltered(){
   return todos
     .filter(t=>{
@@ -487,10 +458,19 @@ function getFiltered(){
 }
 
 function chipHTML(items,selected,onclick,colorFn){
-  return items.map(it=>`<button class="chip${selected===it.id?' on':''}" style="color:${colorFn?colorFn(it):(selected===it.id?'#D0CCC8':'#484858')};border-color:${selected===it.id?(colorFn?colorFn(it):'#D0CCC8'):'transparent'};background:${selected===it.id?(colorFn?colorFn(it)+'15':'#2E2E38'):'transparent'}" onclick="${onclick}('${it.id}')">${it.label}</button>`).join('');
+  return items.map(it=>`<button class="chip" style="color:${colorFn&&selected===it.id?colorFn(it):(selected===it.id?'#D0CCC8':'#484858')};border-color:${selected===it.id?(colorFn?colorFn(it):'#D0CCC8'):'transparent'};background:${selected===it.id?(colorFn?colorFn(it)+'15':'#2E2E38'):'transparent'}" onclick="${onclick}('${it.id}')">${it.label}</button>`).join('');
 }
 function optChipHTML(items,selected,onclick){
   return items.map(it=>`<button class="chip-opt${selected===it.id?' on':''}" onclick="${onclick}('${it.id}')">${it.label}</button>`).join('');
+}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function renderSyncBar(){
+  const bar=document.getElementById('sync-bar');
+  if(!bar)return;
+  const labels={loading:'同期中...',ok:'同期済み',err:'同期エラー'};
+  bar.querySelector('.sync-dot').className='sync-dot '+syncStatus;
+  bar.querySelector('.sync-lbl').textContent=labels[syncStatus]||'';
 }
 
 function render(){
@@ -499,6 +479,10 @@ function render(){
   const prog=todos.length?Math.round(done/todos.length*100):0;
 
   let html=`
+  <div id="sync-bar" class="sync-bar">
+    <div class="sync-dot ${syncStatus}"></div>
+    <span class="sync-lbl">${{loading:'同期中...',ok:'同期済み',err:'同期エラー'}[syncStatus]||''}</span>
+  </div>
   <div class="hdr">
     <div class="hdr-top">
       <div><div class="t-sub">Task Manager</div><div class="t-main">TODO</div></div>
@@ -506,12 +490,6 @@ function render(){
     </div>
     <div class="prog"><div class="prog-fill" style="width:${prog}%"></div></div>
   </div>
-
-  <div class="io-bar">
-    <button class="io-btn" onclick="openExport()">📤 エクスポート</button>
-    <button class="io-btn" onclick="openModal('modal-import')">📥 インポート</button>
-  </div>
-
   <div class="sec-lbl">新しいタスク</div>
   <div class="inp-area">
     <div class="inp-row">
@@ -538,7 +516,6 @@ function render(){
       <div class="fld-row"><span class="fld-lbl">メモ</span><textarea class="memo-inp" rows="2" placeholder="メモを追加..." oninput="state.memo=this.value">${esc(state.memo)}</textarea></div>
     </div>`:''}
   </div>
-
   <div class="flt-row">
     ${['すべて','未完了','完了済み'].map(f=>`<button class="flt-btn${state.filter===f?' on':''}" onclick="setFilter('${f}')">${f}</button>`).join('')}
   </div>
@@ -553,7 +530,6 @@ function render(){
       <option value="due"${state.sort==='due'?' selected':''}>期限順</option>
     </select>
   </div>
-
   <div class="td-list">
     ${filtered.length===0?'<div class="empty">タスクがありません</div>':filtered.map(t=>renderTodo(t)).join('')}
   </div>`;
@@ -562,13 +538,14 @@ function render(){
 }
 
 function renderTodo(t){
-  const cat=CATS.find(c=>c.id===t.category)||CATS[0];
-  const pri=PRIS.find(p=>p.id===t.priority)||PRIS[1];
+  const cat=getCat(t.category);
+  const pri=getPri(t.priority);
   const ds=deadlineStatus(t.due);
   const rl=reminderLabel(t);
   const rp=repeatLabel(t.repeat,t.bizDay,t.monthDay);
   const isExp=state.expanded===t.id;
   const isEdt=state.editing===t.id;
+  const soonClass=!t.done&&ds&&!ds.urgent&&ds.color==='#F7DC6F'?' soon':'';
 
   let badges='';
   if(ds&&!t.done)badges+=`<span class="badge" style="color:${ds.color};border-color:${ds.color}40">${ds.label}</span>`;
@@ -601,14 +578,14 @@ function renderTodo(t){
           <button class="mbtn ok" style="padding:7px 14px;border-radius:6px;font-size:12px" onclick="saveEdit()">保存</button>
         </div>
       </div>`;
-    } else {
+    }else{
       const nextStr=rp&&!t.done&&t.due?`<small class="dim">→ 次: ${advanceDue(t.due,t.repeat,t.bizDay,t.monthDay)}</small>`:'';
       const nextDoneStr=rp&&t.done&&t.nextDue?`<small class="dim">次回表示: ${t.nextDue}の10日前</small>`:'';
       const rtStr=t.reminderTime?`<small class="dim">${new Date(t.reminderTime).toLocaleString('ja-JP',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small>`:'';
       panel=`<div class="exp-panel">
         <div class="exp-fld"><span class="exp-lbl">優先度</span><span class="exp-val" style="color:${pri.color}">${pri.sym} ${pri.label}</span></div>
         <div class="exp-fld"><span class="exp-lbl">カテゴリ</span><span class="exp-val" style="color:${cat.color}">${cat.label}</span></div>
-        <div class="exp-fld"><span class="exp-lbl">期限</span><span class="exp-val ${t.due?'':'emp'}" style="color:${ds?.color||'var(--text2)'};font-size:12px">${t.due||'未設定'}${ds&&!t.done?'<small class="dim">'+ds.label+'</small>':''}</span></div>
+        <div class="exp-fld"><span class="exp-lbl">期限</span><span class="exp-val ${t.due?'':'emp'}" style="color:${ds?.color||'var(--text2)'};font-size:12px">${t.due||'未設定'}${ds&&!t.done?`<small class="dim">${ds.label}</small>`:''}</span></div>
         <div class="exp-fld"><span class="exp-lbl">🔔 通知</span><span class="exp-val ${rl?'':'emp'}">${rl||'なし'}${rl?rtStr:''}</span></div>
         <div class="exp-fld"><span class="exp-lbl">🔁 繰返</span><span class="exp-val ${rp?'':'emp'}" style="color:${rp?'var(--accent4)':'var(--text4)'}">${rp||'なし'}${nextStr}${nextDoneStr}</span></div>
         <div class="exp-fld"><span class="exp-lbl">メモ</span><span class="exp-val ${t.memo?'':'emp'}" style="white-space:pre-wrap">${t.memo?esc(t.memo):'なし'}</span></div>
@@ -616,10 +593,9 @@ function renderTodo(t){
     }
   }
 
-  const soonClass = !t.done && ds && !ds.urgent && ds.color === '#F7DC6F' ? ' soon' : '';
   return `<div class="td-card${t.done?' done':''}${ds?.urgent&&!t.done?' overdue':''}${soonClass}">
     <div class="td-main">
-      <button class="chk-btn${t.done?' on':''}" style="${t.done?`background:${cat.color}`:'color:transparent'}" onclick="${t.done?'doComplete':'confirmComplete'}(${t.id})">${t.done?'✓':''}</button>
+      <button class="chk-btn${t.done?' on':''}" style="${t.done?`background:${cat.color}`:'color:transparent'}" onclick="${t.done?'confirmUncomplete':'confirmComplete'}(${t.id})">${t.done?'✓':''}</button>
       <div class="cat-dot" style="background:${cat.color}"></div>
       <span class="pri-sym" style="color:${pri.color}">${pri.sym}</span>
       <div class="td-cnt" onclick="toggleExpand(${t.id})">
@@ -628,16 +604,13 @@ function renderTodo(t){
       </div>
       <button class="exp-btn" onclick="toggleExpand(${t.id})">${isExp?'▲':'▼'}</button>
       <button class="act-btn" onclick="startEdit(${t.id})">✎</button>
-      <button class="act-btn" style="color:#484858" onclick="confirmDelete(${t.id})">✕</button>
+      <button class="act-btn" onclick="confirmDelete(${t.id})">✕</button>
     </div>
     ${rp&&!t.done&&!isExp?`<div class="rpt-info"><span class="rpt-info-t">🔁 ${rp}で自動更新 — 完了で次の期限へ</span></div>`:''}
     ${panel}
   </div>`;
 }
 
-function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-
-// ── State setters ──
 function setFilter(f){state.filter=f;render();}
 function setActiveCat(c){state.cat=c;render();}
 function setSelCat(c){state.selCat=c;render();}
@@ -651,10 +624,8 @@ function setEditRepeat(r){state.editData.repeat=r;render();}
 
 // ── Init ──
 requestNotif();
-load(); // loadの中でrender()も呼ばれる
-checkResurface();
+loadFromFirebase();
 setInterval(checkResurface,3600000);
-scheduleNotifs();
 </script>
 </body>
 </html>
