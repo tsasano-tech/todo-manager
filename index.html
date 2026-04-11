@@ -2,169 +2,371 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="TODO"/>
+<meta name="theme-color" content="#1C1C1F"/>
+<title>TODO Manager</title>
+
+<!-- PWA manifest -->
+<script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const m={name:"TODO Manager",short_name:"TODO",start_url:".",display:"standalone",background_color:"#1C1C1F",theme_color:"#1C1C1F",icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%231C1C1F'/%3E%3Ctext y='140' x='96' text-anchor='middle' font-size='120' font-family='serif'%3E%F0%9F%93%8B%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml"}]};
+  const el=document.createElement('link');el.rel='manifest';
+  el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
+  document.head.appendChild(el);
+});
+</script>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%231C1C1F'/%3E%3Ctext y='130' x='90' text-anchor='middle' font-size='100' font-family='serif'%3E%F0%9F%93%8B%3C/text%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAQvg0VYK2MrHOP46FVkgDNcQfgS9pgBpY",
+  authDomain: "todo-manager-cfe8d.firebaseapp.com",
+  projectId: "todo-manager-cfe8d",
+  storageBucket: "todo-manager-cfe8d.firebasestorage.app",
+  messagingSenderId: "96357034204",
+  appId: "1:96357034204:web:d944b122e0974c11adac19"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const DOC_REF = db.collection('todos').doc('sasano');
+</script>
+
 <style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:#080808;display:flex;justify-content:center;padding:24px;font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif;}
-.wrap{background:#0E0E11;padding:24px 16px 32px;max-width:390px;width:100%;border-radius:16px;}
-.sync{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-bottom:8px;}
-.sync-dot{width:6px;height:6px;border-radius:50%;background:#4CAF82;}
-.sync-lbl{font-size:10px;color:#505060;letter-spacing:.06em;}
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#0E0E11;
+  --bg2:#16161A;
+  --bg3:#1E1E24;
+  --bg4:#1A1A20;
+  --border:#2A2A35;
+  --border2:#333340;
+  --text:#F8F6F2;
+  --text2:#C8C6C2;
+  --text3:#8A8A98;
+  --text4:#505060;
+  --accent:#4FC3F7;
+  --accent2:#FF7B8A;
+  --accent3:#FFD54F;
+  --accent4:#4CAF82;
+  --card:#16161A;
+}
+html,body{background:var(--bg);font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif;min-height:100vh;overflow-x:hidden;}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+#app{max-width:680px;margin:0 auto;padding:44px 16px 100px;}
+
+/* sync */
+.sync-bar{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:8px;}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:#333340;flex-shrink:0;transition:background .3s;}
+.sync-dot.ok{background:var(--accent4);}
+.sync-dot.err{background:var(--accent2);}
+.sync-dot.loading{background:var(--accent3);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.sync-lbl{font-size:10px;color:var(--text4);letter-spacing:.06em;}
+
+/* header */
+.hdr{margin-bottom:28px;}
 .hdr-top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;}
-.t-sub{font-size:10px;font-weight:500;letter-spacing:.35em;color:#505060;text-transform:uppercase;}
-.t-main{font-size:38px;font-weight:700;color:#F8F6F2;line-height:1;margin-top:2px;letter-spacing:-.02em;}
-.s-num{font-family:'DM Mono',monospace;font-size:32px;color:#F8F6F2;text-align:right;}
-.s-num span{color:#4FC3F7;}
-.s-num small{color:#505060;font-size:16px;}
-.s-lbl{font-size:10px;color:#505060;letter-spacing:.12em;text-align:right;margin-top:3px;}
-.prog{height:3px;background:#2A2A35;border-radius:3px;margin-bottom:20px;overflow:visible;position:relative;}
-.prog-fill{height:3px;background:linear-gradient(90deg,#FF7B8A,#4FC3F7);border-radius:3px;width:28%;position:relative;}
-.prog-fill::after{content:'';position:absolute;right:-1px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:#4FC3F7;box-shadow:0 0 12px #4FC3F7;}
-.inp-area{background:#1E1E24;border:1px solid #333340;border-radius:14px;padding:14px 16px;margin-bottom:14px;}
+.t-sub{font-size:10px;font-weight:500;letter-spacing:.35em;color:var(--text4);text-transform:uppercase;}
+.t-main{font-size:38px;font-weight:700;color:var(--text);line-height:1;margin-top:2px;letter-spacing:-.02em;}
+.s-num{font-family:'DM Mono',monospace;font-size:32px;color:var(--text);text-align:right;font-weight:400;}
+.s-num span{color:var(--accent);}
+.s-num small{color:var(--text4);font-size:16px;}
+.s-lbl{font-size:10px;color:var(--text4);letter-spacing:.12em;text-align:right;margin-top:3px;}
+.prog{height:3px;background:var(--border);border-radius:3px;overflow:visible;position:relative;}
+.prog-fill{height:3px;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width .7s cubic-bezier(.4,0,.2,1);position:relative;}
+.prog-fill::after{content:'';position:absolute;right:-1px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);}
+
+/* input area */
+.sec-lbl{font-size:10px;font-weight:500;letter-spacing:.2em;color:var(--text4);text-transform:uppercase;margin-bottom:8px;}
+.inp-area{background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;flex-direction:column;gap:12px;}
 .inp-row{display:flex;gap:10px;align-items:center;}
-.txt-inp-fake{flex:1;font-size:16px;color:#505060;}
-.add-btn{background:#4FC3F7;border:none;color:#0E0E11;font-size:20px;font-weight:700;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.flt-row{display:flex;background:#1E1E24;border-radius:12px;padding:4px;margin-bottom:12px;gap:2px;}
-.flt-btn{flex:1;font-size:12px;font-weight:500;padding:8px 10px;background:transparent;border:none;color:#8A8A98;border-radius:9px;text-align:center;}
-.flt-btn.on{background:#0E0E11;color:#F8F6F2;box-shadow:0 1px 4px rgba(0,0,0,.5);}
-.flt-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px;}
-.cat-row{display:flex;gap:5px;flex-wrap:wrap;}
-.cat-btn{font-size:11px;font-weight:500;padding:5px 12px;border-radius:20px;border:1px solid #2A2A35;background:transparent;color:#8A8A98;}
-.cat-btn.on{background:#F8F6F2;border-color:#F8F6F2;color:#0E0E11;}
-.srt{background:#1E1E24;border:1px solid #2A2A35;color:#8A8A98;font-size:11px;padding:5px 8px;border-radius:8px;}
+.txt-inp{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:16px;font-family:inherit;caret-color:var(--accent);font-weight:400;}
+.txt-inp::placeholder{color:var(--text4);}
+.add-btn{background:var(--accent);border:none;color:#0E0E11;font-size:20px;font-weight:700;cursor:pointer;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;}
+.add-btn:active{transform:scale(.93);background:#7DD6F8;}
+.tog-adv{background:transparent;border:none;color:var(--text3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:6px;padding:0;font-family:inherit;font-weight:400;}
+.adv-arrow{display:inline-block;transition:transform .2s;font-size:9px;}
+.adv-flds{display:flex;flex-direction:column;gap:11px;padding-top:12px;border-top:1px solid var(--border);}
+.fld-row{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;}
+.fld-lbl{font-size:10px;letter-spacing:.1em;color:var(--text3);width:46px;flex-shrink:0;padding-top:7px;font-weight:500;}
+.fld-chips{display:flex;gap:6px;flex-wrap:wrap;flex:1;}
+.dt-inp{background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:12px;font-family:'DM Mono',monospace;padding:6px 10px;outline:none;}
+.dt-inp::-webkit-calendar-picker-indicator{filter:invert(.6);}
+.memo-inp{flex:1;background:transparent;border:none;border-bottom:1px solid var(--border2);color:var(--text2);font-size:13px;font-family:inherit;outline:none;padding:4px 0;caret-color:var(--accent);resize:none;min-height:24px;line-height:1.6;}
+.memo-inp::placeholder{color:var(--text4);}
+.chip{font-size:11px;padding:5px 13px;border-radius:20px;border:1px solid transparent;cursor:pointer;background:transparent;font-family:inherit;font-weight:500;transition:all .15s;}
+.chip-opt{font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid var(--border2);cursor:pointer;background:transparent;color:var(--text3);white-space:nowrap;font-family:inherit;font-weight:400;transition:all .15s;}
+.chip-opt.on{background:var(--bg2);color:var(--text);border-color:var(--border2);}
+
+/* filters */
+.flt-row{display:flex;background:var(--bg3);border-radius:12px;padding:4px;margin-bottom:14px;gap:2px;}
+.flt-btn{flex:1;font-size:12px;font-weight:500;padding:8px 10px;background:transparent;border:none;color:var(--text3);cursor:pointer;font-family:inherit;border-radius:9px;transition:all .2s;}
+.flt-btn.on{background:var(--bg);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.4);}
+.flt-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+.cat-flt-row{display:flex;gap:6px;flex-wrap:wrap;}
+.cat-flt-btn{font-size:11px;font-weight:500;padding:5px 12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;font-family:inherit;transition:all .2s;}
+.srt-sel{background:var(--bg3);border:1px solid var(--border2);color:var(--text3);font-size:11px;padding:5px 8px;border-radius:8px;outline:none;font-family:inherit;}
+
+/* todo cards */
 .td-list{display:flex;flex-direction:column;gap:6px;}
-.td-card{background:#16161A;border:1px solid #2A2A35;border-radius:14px;overflow:hidden;}
-.td-card.overdue{border-color:#FF7B8A60;border-left:3px solid #FF7B8A;background:#1F1418;}
-.td-card.soon{border-color:#FFD54F50;border-left:3px solid #FFD54F;background:#1C1A12;}
-.td-card.done-c{opacity:.38;}
+.td-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:border-color .2s,background .2s;}
+.td-card.done{opacity:.38;}
+.td-card.overdue{border-color:#FF7B8A60;border-left:3px solid var(--accent2);background:#1F1418;}
+.td-card.overdue .td-txt{color:#FFBBC2;}
+.td-card.soon{border-color:#FFD54F50;border-left:3px solid var(--accent3);background:#1C1A12;}
+.td-card.soon .td-txt{color:#FFE88A;}
 .td-main{display:flex;align-items:center;gap:12px;padding:14px 14px;}
-.chk{width:24px;height:24px;border-radius:50%;border:2px solid #333340;flex-shrink:0;}
-.chk.on{background:#E8B4B8;border-color:#E8B4B8;display:flex;align-items:center;justify-content:center;color:#0E0E11;font-size:12px;font-weight:700;}
-.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.pri{font-size:11px;flex-shrink:0;}
-.td-cnt{flex:1;min-width:0;}
-.td-txt{font-size:15px;font-weight:500;color:#F8F6F2;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.td-txt.ov{color:#FFBBC2;}
-.td-txt.sn{color:#FFE88A;}
-.td-txt.dn{text-decoration:line-through;color:#505060;font-weight:400;}
-.td-meta{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;align-items:center;}
+.chk-btn{width:24px;height:24px;border-radius:50%;border:2px solid var(--border2);background:transparent;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:transparent;font-family:inherit;transition:all .2s;}
+.chk-btn.on{border-color:transparent;color:#0E0E11;font-weight:700;}
+.cat-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.pri-sym{font-size:11px;flex-shrink:0;}
+.td-cnt{flex:1;min-width:0;cursor:pointer;}
+.td-txt{font-size:15px;font-weight:500;color:var(--text);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.td-txt.dn{text-decoration:line-through;color:var(--text4);font-weight:400;}
+.td-meta{display:flex;gap:5px;align-items:center;margin-top:5px;flex-wrap:wrap;}
 .badge{font-size:10px;font-weight:500;padding:2px 8px;border-radius:20px;border:1px solid;white-space:nowrap;}
-.exp-btn{font-size:11px;color:#505060;padding:4px 6px;background:transparent;border:none;}
-.act-btn{font-size:15px;color:#505060;padding:4px 6px;background:transparent;border:none;}
+.memo-prev{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;}
+.exp-btn{background:transparent;border:none;color:var(--text4);font-size:11px;cursor:pointer;padding:4px 6px;flex-shrink:0;font-family:inherit;transition:color .15s;}
+.act-btn{background:transparent;border:none;color:var(--text4);cursor:pointer;font-size:15px;padding:4px 6px;line-height:1;font-family:inherit;transition:color .15s;}
+.act-btn:active{color:var(--text);}
+
+/* expanded panel */
+.exp-panel{border-top:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:12px;background:var(--bg4);}
+.exp-fld{display:flex;gap:10px;align-items:flex-start;}
+.exp-lbl{font-size:10px;font-weight:500;letter-spacing:.1em;color:var(--text4);width:46px;flex-shrink:0;padding-top:3px;}
+.exp-val{font-size:13px;color:var(--text2);flex:1;line-height:1.5;}
+.exp-val.emp{color:var(--text4);}
+.exp-inp{flex:1;background:transparent;border:none;border-bottom:1px solid var(--border2);color:var(--text);font-size:13px;font-family:inherit;outline:none;padding:2px 0 4px;caret-color:var(--accent);font-weight:400;}
+.exp-dt{background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:12px;font-family:'DM Mono',monospace;padding:5px 10px;outline:none;}
+.exp-dt::-webkit-calendar-picker-indicator{filter:invert(.6);}
+.exp-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:4px;}
+.exp-memo-inp{flex:1;background:transparent;border:none;border-bottom:1px solid var(--border2);color:var(--text);font-size:13px;font-family:inherit;outline:none;padding:2px 0 4px;caret-color:var(--accent);resize:none;line-height:1.6;}
+
+/* repeat info */
+.rpt-info{display:flex;align-items:center;gap:6px;padding:7px 14px;background:#0F1E16;border-top:1px solid #1E3A28;}
+.rpt-info-t{font-size:11px;color:var(--accent4);font-weight:500;}
+
+/* modals */
+.modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(6px);}
+.modal-ov.show{display:flex;animation:fdi .15s ease;}
+@keyframes fdi{from{opacity:0}to{opacity:1}}
+.modal-box{background:var(--bg3);border:1px solid var(--border2);border-radius:18px;padding:24px 22px 20px;width:min(320px,92vw);animation:poi .22s cubic-bezier(.34,1.56,.64,1);}
+@keyframes poi{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+.modal-ico{font-size:32px;text-align:center;margin-bottom:12px;}
+.modal-ttl{font-size:16px;font-weight:700;color:var(--text);text-align:center;margin-bottom:6px;}
+.modal-sub{font-size:12px;color:var(--text3);text-align:center;margin-bottom:14px;line-height:1.6;}
+.modal-task{font-size:13px;font-weight:500;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:16px;text-align:center;}
+.modal-btns{display:flex;gap:8px;}
+.mbtn{flex:1;padding:12px;border-radius:12px;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;}
+.mbtn.cancel{background:var(--bg2);color:var(--text3);}
+.mbtn.cancel:active{background:var(--border);}
+.mbtn.ok{background:var(--text);color:#0E0E11;}
+.mbtn.ok:active{background:var(--accent);}
+.mbtn.danger{background:var(--accent2);color:#0E0E11;}
+.mbtn.danger:active{opacity:.8;}
+
+/* toast */
+.toast-wrap{position:fixed;bottom:28px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none;}
+.toast{background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--accent3);border-radius:12px;padding:12px 14px;min-width:220px;max-width:300px;pointer-events:all;animation:sli .3s ease;}
+@keyframes sli{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.toast-cl{float:right;background:transparent;border:none;color:var(--text4);cursor:pointer;font-size:14px;margin-left:8px;font-family:inherit;}
+.toast-ttl{font-size:11px;font-weight:600;color:var(--accent3);margin-bottom:3px;}
+.toast-txt{font-size:13px;color:var(--text2);line-height:1.4;}
+
+/* misc */
+.biz-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+.biz-inp{width:54px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;padding:5px 8px;outline:none;text-align:center;font-family:'DM Mono',monospace;}
+.empty{text-align:center;color:var(--text4);font-size:12px;letter-spacing:.1em;padding:56px 0;}
+small.dim{color:var(--text4);font-size:11px;margin-left:8px;font-family:'DM Mono',monospace;}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="sync"><div class="sync-dot"></div><span class="sync-lbl">同期済み</span></div>
-  <div class="hdr-top">
-    <div><div class="t-sub">Task Manager</div><div class="t-main">TODO</div></div>
-    <div><div class="s-num"><span>3</span><small> / 12</small></div><div class="s-lbl">完了 / 合計</div></div>
-  </div>
-  <div class="prog"><div class="prog-fill"></div></div>
+<div id="app"><div style="text-align:center;padding:80px 20px;color:#6A6A7A;font-size:14px;">読み込み中...</div></div>
 
-  <div class="inp-area">
-    <div class="inp-row">
-      <span class="txt-inp-fake">タスクを入力...</span>
-      <div class="add-btn">＋</div>
-    </div>
-  </div>
-
-  <div class="flt-row">
-    <div class="flt-btn on">未完了</div>
-    <div class="flt-btn">すべて</div>
-    <div class="flt-btn">完了済み</div>
-  </div>
-  <div class="flt-meta">
-    <div class="cat-row">
-      <span class="cat-btn on">すべて</span>
-      <span class="cat-btn">仕事</span>
-      <span class="cat-btn">個人</span>
-      <span class="cat-btn">その他</span>
-    </div>
-    <select class="srt"><option>優先度→期限順</option></select>
-  </div>
-
-  <div class="td-list">
-    <div class="td-card overdue">
-      <div class="td-main">
-        <div class="chk"></div>
-        <div class="dot" style="background:#E8B4B8"></div>
-        <span class="pri" style="color:#FF7B8A">▲</span>
-        <div class="td-cnt">
-          <div class="td-txt ov">京都　賃料振込</div>
-          <div class="td-meta">
-            <span class="badge" style="color:#FF7B8A;border-color:#FF7B8A40">1日超過</span>
-            <span class="badge" style="color:#8A8A98;border-color:#333340">🔔 3日前</span>
-            <span class="badge" style="color:#4CAF82;border-color:#1E3A28">🔁 毎月第7営業日</span>
-          </div>
-        </div>
-        <button class="exp-btn">▼</button><button class="act-btn">✎</button><button class="act-btn">✕</button>
-      </div>
-    </div>
-
-    <div class="td-card soon">
-      <div class="td-main">
-        <div class="chk"></div>
-        <div class="dot" style="background:#E8B4B8"></div>
-        <span class="pri" style="color:#FFD54F">◆</span>
-        <div class="td-cnt">
-          <div class="td-txt sn">給与振込</div>
-          <div class="td-meta">
-            <span class="badge" style="color:#FFD54F;border-color:#FFD54F40">あと2日</span>
-            <span class="badge" style="color:#8A8A98;border-color:#333340">🔔 3日前</span>
-            <span class="badge" style="color:#4CAF82;border-color:#1E3A28">🔁 毎月</span>
-          </div>
-        </div>
-        <button class="exp-btn">▼</button><button class="act-btn">✎</button><button class="act-btn">✕</button>
-      </div>
-    </div>
-
-    <div class="td-card">
-      <div class="td-main">
-        <div class="chk"></div>
-        <div class="dot" style="background:#E8B4B8"></div>
-        <span class="pri" style="color:#FFD54F">◆</span>
-        <div class="td-cnt">
-          <div class="td-txt">東京ワイン振込</div>
-          <div class="td-meta">
-            <span class="badge" style="color:#6A6A78;border-color:#333340">あと14日</span>
-            <span class="badge" style="color:#8A8A98;border-color:#333340">🔔 3日前</span>
-            <span class="badge" style="color:#4CAF82;border-color:#1E3A28">🔁 毎月</span>
-          </div>
-        </div>
-        <button class="exp-btn">▼</button><button class="act-btn">✎</button><button class="act-btn">✕</button>
-      </div>
-    </div>
-
-    <div class="td-card">
-      <div class="td-main">
-        <div class="chk"></div>
-        <div class="dot" style="background:#E8B4B8"></div>
-        <span class="pri" style="color:#FFD54F">◆</span>
-        <div class="td-cnt">
-          <div class="td-txt">Augu雇用契約書整備</div>
-          <div class="td-meta"></div>
-        </div>
-        <button class="exp-btn">▼</button><button class="act-btn">✎</button><button class="act-btn">✕</button>
-      </div>
-    </div>
-
-    <div class="td-card done-c">
-      <div class="td-main">
-        <div class="chk on">✓</div>
-        <div class="dot" style="background:#E8B4B8"></div>
-        <span class="pri" style="color:#FFD54F">◆</span>
-        <div class="td-cnt">
-          <div class="td-txt dn">京都　売上報告</div>
-          <div class="td-meta">
-            <span class="badge" style="color:#4CAF82;border-color:#1E3A28">🔁 5/4の10日前に復活</span>
-          </div>
-        </div>
-        <button class="exp-btn">▼</button><button class="act-btn">✎</button><button class="act-btn">✕</button>
-      </div>
+<!-- Modals -->
+<div class="modal-ov" id="modal-complete">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-ico">✅</div>
+    <div class="modal-ttl">タスクを完了にしますか？</div>
+    <div class="modal-sub" id="mc-sub"></div>
+    <div class="modal-task" id="mc-task"></div>
+    <div class="modal-btns">
+      <button class="mbtn cancel" onclick="closeModal('modal-complete')">キャンセル</button>
+      <button class="mbtn ok" id="mc-ok">完了にする</button>
     </div>
   </div>
 </div>
-</body>
-</html>
+
+<div class="modal-ov" id="modal-uncomplete">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-ico">↩️</div>
+    <div class="modal-ttl">未完了に戻しますか？</div>
+    <div class="modal-task" id="mu-task"></div>
+    <div class="modal-btns">
+      <button class="mbtn cancel" onclick="closeModal('modal-uncomplete')">キャンセル</button>
+      <button class="mbtn ok" id="mu-ok">未完了に戻す</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-delete">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-ico">🗑️</div>
+    <div class="modal-ttl">タスクを削除しますか？</div>
+    <div class="modal-sub" style="color:var(--accent2)">この操作は取り消せません。</div>
+    <div class="modal-task" id="md-task"></div>
+    <div class="modal-btns">
+      <button class="mbtn cancel" onclick="closeModal('modal-delete')">キャンセル</button>
+      <button class="mbtn danger" id="md-ok">削除する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+const CATS = [
+  {id:'work',    label:'仕事',   color:'#E8B4B8'},
+  {id:'personal',label:'個人',   color:'#A8D8EA'},
+  {id:'other',   label:'その他', color:'#ABEBC6'},
+];
+const PRIS = [
+  {id:'high',label:'高',color:'#E8B4B8',sym:'▲'},
+  {id:'mid', label:'中',color:'#F7DC6F',sym:'◆'},
+  {id:'low', label:'低',color:'#777',   sym:'▼'},
+];
+const REMINDERS = [
+  {id:'none',label:'なし',   mins:null},
+  {id:'10m', label:'10分前', mins:10},
+  {id:'30m', label:'30分前', mins:30},
+  {id:'1h',  label:'1時間前',mins:60},
+  {id:'1d',  label:'1日前',  mins:1440},
+  {id:'3d',  label:'3日前',  mins:4320},
+  {id:'1w',  label:'1週間前',mins:10080},
+];
+const REPEATS = [
+  {id:'none',     label:'繰り返しなし'},
+  {id:'daily',    label:'毎日'},
+  {id:'weekly',   label:'毎週'},
+  {id:'monthly',  label:'毎月'},
+  {id:'monthday', label:'毎月●日'},
+  {id:'bizdays',  label:'毎月●営業日'},
+];
+
+let todos = [];
+let syncStatus = 'loading'; // loading / ok / err
+let state = {
+  filter:'未完了', cat:'すべて', sort:'priority_due',
+  input:'', selCat:'work', selPri:'mid', due:'', memo:'', reminder:'none',
+  repeat:'none', bizDay:1, monthDay:1, showAdv:false,
+  expanded:null, editing:null, editData:{},
+};
+let notifTimers = {};
+
+// ── Firebase sync ──
+function saveToFirebase(){
+  syncStatus='loading';renderSyncBar();
+  DOC_REF.set({todos:JSON.stringify(todos),updatedAt:new Date().toISOString()})
+    .then(()=>{syncStatus='ok';renderSyncBar();})
+    .catch(()=>{syncStatus='err';renderSyncBar();});
+}
+
+function loadFromFirebase(){
+  syncStatus='loading';renderSyncBar();
+  DOC_REF.get().then(doc=>{
+    if(doc.exists){
+      try{
+        const data=JSON.parse(doc.data().todos);
+        if(Array.isArray(data)){todos=data;}
+      }catch(e){}
+    }
+    syncStatus='ok';
+    checkResurface();
+    scheduleNotifs();
+    render();
+  }).catch(()=>{
+    syncStatus='err';
+    render();
+  });
+}
+
+// リアルタイム同期（他のデバイスで変更があれば自動反映）
+DOC_REF.onSnapshot(doc=>{
+  if(doc.exists&&doc.metadata.hasPendingWrites===false){
+    try{
+      const data=JSON.parse(doc.data().todos);
+      if(Array.isArray(data)){
+        todos=data;
+        syncStatus='ok';
+        renderSyncBar();
+        render();
+      }
+    }catch(e){}
+  }
+});
+
+function save(){saveToFirebase();}
+
+// ── Date helpers ──
+function fmt(d){return d.toISOString().split('T')[0];}
+function calcRT(due,rem){
+  if(!due||!rem||rem==='none')return null;
+  const o=REMINDERS.find(r=>r.id===rem);
+  if(!o||!o.mins)return null;
+  const d=new Date(due+'T09:00:00');
+  d.setMinutes(d.getMinutes()-o.mins);
+  return d.toISOString();
+}
+function deadlineStatus(due){
+  if(!due)return null;
+  const now=new Date();now.setHours(0,0,0,0);
+  const d=new Date(due);d.setHours(0,0,0,0);
+  const diff=Math.round((d-now)/86400000);
+  if(diff<0) return{label:`${-diff}日超過`,color:'#E8A0AA',urgent:true};
+  if(diff===0)return{label:'今日',color:'#F7DC6F',urgent:true};
+  if(diff<=3) return{label:`あと${diff}日`,color:'#F7DC6F',urgent:false};
+  return{label:`あと${diff}日`,color:'#666',urgent:false};
+}
+function isWeekday(d){const w=d.getDay();return w!==0&&w!==6;}
+function getNthBiz(y,m,n){
+  const d=new Date(y,m,1);let c=0;
+  while(true){
+    if(isWeekday(d)){c++;if(c===n)return new Date(d);}
+    d.setDate(d.getDate()+1);
+    if(d.getMonth()!==m){const l=new Date(y,m+1,0);while(!isWeekday(l))l.setDate(l.getDate()-1);return l;}
+  }
+}
+function advanceDue(due,repeat,bizDay,monthDay){
+  if(!due||repeat==='none')return due;
+  const d=new Date(due);
+  if(repeat==='bizdays'){
+    const nm=d.getMonth()+1>11?0:d.getMonth()+1;
+    const ny=d.getMonth()+1>11?d.getFullYear()+1:d.getFullYear();
+    return fmt(getNthBiz(ny,nm,bizDay||1));
+  }
+  if(repeat==='monthday'){
+    const day=monthDay||d.getDate();
+    const nm=d.getMonth()+1>11?0:d.getMonth()+1;
+    const ny=d.getMonth()+1>11?d.getFullYear()+1:d.getFullYear();
+    const next=new Date(ny,nm,day);
+    if(next.getMonth()!==nm){next.setDate(0);}
+    return fmt(next);
+  }
+  if(repeat==='daily')  d.setDate(d.getDate()+1);
+  if(repeat==='weekly') d.setDate(d.getDate()+7);
+  if(repeat==='monthly')d.setMonth(d.getMonth()+1);
+  return fmt(d);
+}
+function repeatLabel(repeat,bizDay,monthDay){
+  if(!repeat||repeat==='none')return null;
+  if(repeat==='bizdays')return bizDay?`毎月第${bizDay}営業日`:'毎月●営業日';
+  if(repeat==='mon
