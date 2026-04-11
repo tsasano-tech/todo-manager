@@ -646,8 +646,7 @@ function renderTodo(t){
       <button class="act-btn" onclick="startEdit(${t.id})">✎</button>
       <button class="act-btn" onclick="confirmDelete(${t.id})">✕</button>
     </div>
-    ${rp&&!t.done&&!isExp?`<div class="rpt-info"><span class="rpt-info-t">🔁 ${rp}で自動更新 — 完了で次の期限へ</span></div>`:''}
-    ${panel}
+    ${rp&&!t.done&&!isExp?'':''}    ${panel}
   </div>`;
 }
 
