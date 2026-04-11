@@ -369,4 +369,303 @@ function advanceDue(due,repeat,bizDay,monthDay){
 function repeatLabel(repeat,bizDay,monthDay){
   if(!repeat||repeat==='none')return null;
   if(repeat==='bizdays')return bizDay?`毎月第${bizDay}営業日`:'毎月●営業日';
-  if(repeat==='monthday')return monthDay?`毎月${mo
+  if(repeat==='monthday')return monthDay?`毎月${monthDay}日`:'毎月●日';
+  return(REPEATS.find(r=>r.id===repeat)||{}).label||null;
+}
+function reminderLabel(todo){
+  if(!todo.reminder||todo.reminder==='none')return null;
+  return(REMINDERS.find(r=>r.id===todo.reminder)||{}).label||null;
+}
+function requestNotif(){if(typeof Notification!=='undefined'&&Notification.permission==='default')Notification.requestPermission();}
+function scheduleNotifs(){
+  Object.values(notifTimers).forEach(clearTimeout);notifTimers={};
+  todos.forEach(t=>{
+    if(t.done||!t.reminderTime||t.reminder==='none')return;
+    const delay=new Date(t.reminderTime).getTime()-Date.now();
+    if(delay>0)notifTimers[t.id]=setTimeout(()=>{
+      if(Notification.permission==='granted')new Notification(`📋 ${t.text}`,{body:`期限: ${t.due}`});
+      showToast(t.text);
+    },delay);
+  });
+}
+function showToast(text){
+  const w=document.getElementById('toast-wrap');
+  const el=document.createElement('div');el.className='toast';
+  el.innerHTML=`<button class="toast-cl" onclick="this.parentElement.remove()">✕</button><div class="toast-ttl">🔔 リマインダー</div><div class="toast-txt">${text}</div>`;
+  w.appendChild(el);setTimeout(()=>el.remove(),8000);
+}
+function checkResurface(){
+  const now=new Date();now.setHours(0,0,0,0);
+  let changed=false;
+  todos=todos.map(t=>{
+    if(!t.done||!t.repeat||t.repeat==='none'||!t.nextDue)return t;
+    const nd=new Date(t.nextDue);nd.setHours(0,0,0,0);
+    if(Math.round((nd-now)/86400000)<=10){changed=true;return{...t,done:false,due:t.nextDue,nextDue:null};}
+    return t;
+  });
+  if(changed){save();render();}
+}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+document.querySelectorAll('.modal-ov').forEach(m=>m.addEventListener('click',()=>m.classList.remove('show')));
+
+function addTodo(){
+  const text=state.input.trim();
+  if(!text)return;
+  const newId=todos.reduce((mx,t)=>Math.max(mx,t.id),0)+1;
+  const rt=calcRT(state.due,state.reminder);
+  todos.unshift({id:newId,text,category:state.selCat,priority:state.selPri,due:state.due,memo:state.memo.trim(),done:false,reminder:state.reminder,reminderTime:rt,repeat:state.repeat,bizDay:state.repeat==='bizdays'?state.bizDay:null,monthDay:state.repeat==='monthday'?state.monthDay:null});
+  state.input='';state.due='';state.memo='';state.reminder='none';state.repeat='none';state.bizDay=1;state.monthDay=1;state.showAdv=false;
+  save();scheduleNotifs();render();
+  document.getElementById('txt-inp').focus();
+}
+function confirmComplete(id){
+  const t=todos.find(x=>x.id===id);if(!t)return;
+  document.getElementById('mc-task').textContent=t.text;
+  document.getElementById('mc-sub').textContent=t.repeat&&t.repeat!=='none'?'🔁 繰り返しタスクです。完了にすると次の期限に自動更新されます。':'';
+  document.getElementById('mc-ok').onclick=()=>{doComplete(id);closeModal('modal-complete');};
+  openModal('modal-complete');
+}
+function confirmUncomplete(id){
+  const t=todos.find(x=>x.id===id);if(!t)return;
+  document.getElementById('mu-task').textContent=t.text;
+  document.getElementById('mu-ok').onclick=()=>{doComplete(id);closeModal('modal-uncomplete');};
+  openModal('modal-uncomplete');
+}
+function doComplete(id){
+  todos=todos.map(t=>{
+    if(t.id!==id)return t;
+    if(!t.done&&t.repeat&&t.repeat!=='none'&&t.due){
+      const nextDue=advanceDue(t.due,t.repeat,t.bizDay,t.monthDay);
+      return{...t,done:true,nextDue,reminderTime:calcRT(nextDue,t.reminder)};
+    }
+    return{...t,done:!t.done};
+  });
+  save();scheduleNotifs();render();
+}
+function confirmDelete(id){
+  const t=todos.find(x=>x.id===id);if(!t)return;
+  document.getElementById('md-task').textContent=t.text;
+  document.getElementById('md-ok').onclick=()=>{todos=todos.filter(x=>x.id!==id);if(state.expanded===id)state.expanded=null;save();render();closeModal('modal-delete');};
+  openModal('modal-delete');
+}
+function toggleExpand(id){state.expanded=state.expanded===id?null:id;render();}
+function startEdit(id){
+  const t=todos.find(x=>x.id===id);if(!t)return;
+  state.editing=id;state.expanded=id;
+  state.editData={text:t.text,priority:t.priority,due:t.due||'',memo:t.memo||'',category:t.category,reminder:t.reminder||'none',repeat:t.repeat||'none',bizDay:t.bizDay||1,monthDay:t.monthDay||1};
+  render();
+}
+function saveEdit(){
+  if(!state.editData.text?.trim())return;
+  const rt=calcRT(state.editData.due,state.editData.reminder);
+  todos=todos.map(t=>t.id===state.editing?{...t,...state.editData,text:state.editData.text.trim(),reminderTime:rt,bizDay:state.editData.repeat==='bizdays'?(state.editData.bizDay||1):null,monthDay:state.editData.repeat==='monthday'?(state.editData.monthDay||1):null}:t);
+  state.editing=null;save();scheduleNotifs();render();
+}
+function cancelEdit(){state.editing=null;render();}
+function getCat(id){return CATS.find(c=>c.id===id)||CATS[0];}
+function getPri(id){return PRIS.find(p=>p.id===id)||PRIS[1];}
+
+function getFiltered(){
+  return todos
+    .filter(t=>{
+      const cm=state.cat==='すべて'||t.category===state.cat;
+      const sm=state.filter==='すべて'||(state.filter==='未完了'?!t.done:t.done);
+      return cm&&sm;
+    })
+    .sort((a,b)=>{
+      if(state.sort==='priority'){const o={high:0,mid:1,low:2};return o[a.priority]-o[b.priority];}
+      if(state.sort==='due'){if(!a.due&&!b.due)return 0;if(!a.due)return 1;if(!b.due)return -1;return a.due.localeCompare(b.due);}
+      if(state.sort==='priority_due'){
+        const now=new Date();now.setHours(0,0,0,0);
+        const isOverdue=t=>t.due&&new Date(t.due)<now;
+        // 期限超過を最優先
+        if(isOverdue(a)&&!isOverdue(b))return -1;
+        if(!isOverdue(a)&&isOverdue(b))return 1;
+        // 両方超過なら古い順
+        if(isOverdue(a)&&isOverdue(b))return a.due.localeCompare(b.due);
+        // 優先度
+        const o={high:0,mid:1,low:2};
+        const pd=o[a.priority]-o[b.priority];if(pd!==0)return pd;
+        // 期限
+        if(!a.due&&!b.due)return b.id-a.id;
+        if(!a.due)return 1;if(!b.due)return -1;
+        const dd=a.due.localeCompare(b.due);if(dd!==0)return dd;
+        return b.id-a.id;
+      }
+      return b.id-a.id;
+    });
+}
+
+function chipHTML(items,selected,onclick,colorFn){
+  return items.map(it=>`<button class="chip" style="color:${colorFn&&selected===it.id?colorFn(it):(selected===it.id?'#D0CCC8':'#484858')};border-color:${selected===it.id?(colorFn?colorFn(it):'#D0CCC8'):'transparent'};background:${selected===it.id?(colorFn?colorFn(it)+'15':'#2E2E38'):'transparent'}" onclick="${onclick}('${it.id}')">${it.label}</button>`).join('');
+}
+function optChipHTML(items,selected,onclick){
+  return items.map(it=>`<button class="chip-opt${selected===it.id?' on':''}" onclick="${onclick}('${it.id}')">${it.label}</button>`).join('');
+}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function renderSyncBar(){
+  const bar=document.getElementById('sync-bar');
+  if(!bar)return;
+  const labels={loading:'同期中...',ok:'同期済み',err:'同期エラー'};
+  bar.querySelector('.sync-dot').className='sync-dot '+syncStatus;
+  bar.querySelector('.sync-lbl').textContent=labels[syncStatus]||'';
+}
+
+function render(){
+  const filtered=getFiltered();
+  const done=todos.filter(t=>t.done).length;
+  const prog=todos.length?Math.round(done/todos.length*100):0;
+
+  let html=`
+  <div id="sync-bar" class="sync-bar">
+    <div class="sync-dot ${syncStatus}"></div>
+    <span class="sync-lbl">${{loading:'同期中...',ok:'同期済み',err:'同期エラー'}[syncStatus]||''}</span>
+  </div>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div><div class="t-sub">Task Manager</div><div class="t-main">TODO</div></div>
+      <div><div class="s-num"><span>${done}</span><small> / ${todos.length}</small></div><div class="s-lbl">完了 / 合計</div></div>
+    </div>
+    <div class="prog"><div class="prog-fill" style="width:${prog}%"></div></div>
+  </div>
+  <div class="sec-lbl">新しいタスク</div>
+  <div class="inp-area">
+    <div class="inp-row">
+      <input id="txt-inp" class="txt-inp" placeholder="タスクを入力..." value="${esc(state.input)}" oninput="state.input=this.value" onkeydown="if(event.key==='Enter')addTodo()"/>
+      <button class="add-btn" onclick="addTodo()">＋</button>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">${chipHTML(CATS,state.selCat,'setSelCat',it=>it.color)}</div>
+    <button class="tog-adv" onclick="state.showAdv=!state.showAdv;render()">
+      <span class="adv-arrow" style="transform:rotate(${state.showAdv?90:0}deg)">▶</span>
+      ${state.showAdv?'詳細を閉じる':'優先度・期限・リマインダー・繰り返しを設定'}
+    </button>
+    ${state.showAdv?`
+    <div class="adv-flds">
+      <div class="fld-row"><span class="fld-lbl">優先度</span><div class="fld-chips">${chipHTML(PRIS,state.selPri,'setSelPri',it=>it.color)}</div></div>
+      <div class="fld-row"><span class="fld-lbl">期限</span><input type="date" class="dt-inp" value="${state.due}" onchange="state.due=this.value"/></div>
+      <div class="fld-row"><span class="fld-lbl">🔔 通知</span><div class="fld-chips">${optChipHTML(REMINDERS,state.reminder,'setReminder')}</div></div>
+      <div class="fld-row"><span class="fld-lbl">🔁 繰返</span>
+        <div style="flex:1">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${optChipHTML(REPEATS,state.repeat,'setRepeat')}</div>
+          ${state.repeat==='bizdays'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="23" value="${state.bizDay}" onfocus="this.select()" oninput="state.bizDay=Math.max(1,Math.min(23,parseInt(this.value)||1))" onblur="if(!this.value||isNaN(parseInt(this.value)))this.value=state.bizDay=1"/><span style="color:var(--text3);font-size:12px">営業日目</span></div>`:''}
+          ${state.repeat==='monthday'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="31" value="${state.monthDay}" onfocus="this.select()" oninput="state.monthDay=Math.max(1,Math.min(31,parseInt(this.value)||1))" onblur="if(!this.value||isNaN(parseInt(this.value)))this.value=state.monthDay=1"/><span style="color:var(--text3);font-size:12px">日</span></div>`:''}
+        </div>
+      </div>
+      <div class="fld-row"><span class="fld-lbl">メモ</span><textarea class="memo-inp" rows="2" placeholder="メモを追加..." oninput="state.memo=this.value">${esc(state.memo)}</textarea></div>
+    </div>`:''}
+  </div>
+  <div class="flt-row">
+    ${['すべて','未完了','完了済み'].map(f=>`<button class="flt-btn${state.filter===f?' on':''}" onclick="setFilter('${f}')">${f}</button>`).join('')}
+  </div>
+  <div class="flt-meta">
+    <div class="cat-flt-row">
+      ${[{id:'すべて',label:'すべて',color:null},...CATS].map(c=>`<button class="cat-flt-btn" style="${state.cat===c.id?`background:${c.color||'#F0EDE8'};border-color:${c.color||'#F0EDE8'};color:#1C1C1F`:''}" onclick="setActiveCat('${c.id}')">${c.label}</button>`).join('')}
+    </div>
+    <select class="srt-sel" onchange="state.sort=this.value;render()">
+      <option value="priority_due"${state.sort==='priority_due'?' selected':''}>優先度→期限順</option>
+      <option value="created"${state.sort==='created'?' selected':''}>作成順</option>
+      <option value="priority"${state.sort==='priority'?' selected':''}>優先度順</option>
+      <option value="due"${state.sort==='due'?' selected':''}>期限順</option>
+    </select>
+  </div>
+  <div class="td-list">
+    ${filtered.length===0?'<div class="empty">タスクがありません</div>':filtered.map(t=>renderTodo(t)).join('')}
+  </div>`;
+
+  document.getElementById('app').innerHTML=html;
+}
+
+function renderTodo(t){
+  const cat=getCat(t.category);
+  const pri=getPri(t.priority);
+  const ds=deadlineStatus(t.due);
+  const rl=reminderLabel(t);
+  const rp=repeatLabel(t.repeat,t.bizDay,t.monthDay);
+  const isExp=state.expanded===t.id;
+  const isEdt=state.editing===t.id;
+  const soonClass=!t.done&&ds&&!ds.urgent&&ds.color==='#F7DC6F'?' soon':'';
+
+  let badges='';
+  if(ds&&!t.done)badges+=`<span class="badge" style="color:${ds.color};border-color:${ds.color}40">${ds.label}</span>`;
+  if(t.due&&t.done)badges+=`<span class="badge" style="color:#333;border-color:#222">${t.due}</span>`;
+  if(t.done&&t.nextDue)badges+=`<span class="badge" style="color:var(--accent4);border-color:#2A4035">🔁 ${t.nextDue}の10日前に復活</span>`;
+  if(rl&&!t.done)badges+=`<span class="badge" style="color:#C0C0D0;border-color:#444454">🔔 ${rl}</span>`;
+  if(rp)badges+=`<span class="badge" style="color:var(--accent4);border-color:#2A4035">🔁 ${rp}</span>`;
+  if(t.memo)badges+=`<span class="memo-prev">✎ ${esc(t.memo)}</span>`;
+
+  let panel='';
+  if(isExp){
+    if(isEdt){
+      const ed=state.editData;
+      panel=`<div class="exp-panel">
+        <div class="exp-fld"><span class="exp-lbl">タスク</span><input class="exp-inp" value="${esc(ed.text)}" oninput="state.editData.text=this.value" onkeydown="if(event.key==='Enter')saveEdit()"/></div>
+        <div class="exp-fld"><span class="exp-lbl">優先度</span><div style="display:flex;gap:6px">${chipHTML(PRIS,ed.priority,'setEditPri',it=>it.color)}</div></div>
+        <div class="exp-fld"><span class="exp-lbl">カテゴリ</span><div style="display:flex;gap:6px;flex-wrap:wrap">${chipHTML(CATS,ed.category,'setEditCat',it=>it.color)}</div></div>
+        <div class="exp-fld"><span class="exp-lbl">期限</span><input type="date" class="exp-dt" value="${ed.due||''}" onchange="state.editData.due=this.value"/></div>
+        <div class="exp-fld"><span class="exp-lbl">🔔 通知</span><div style="display:flex;gap:6px;flex-wrap:wrap">${optChipHTML(REMINDERS,ed.reminder,'setEditReminder')}</div></div>
+        <div class="exp-fld"><span class="exp-lbl">🔁 繰返</span>
+          <div style="flex:1">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">${optChipHTML(REPEATS,ed.repeat,'setEditRepeat')}</div>
+            ${ed.repeat==='bizdays'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="23" value="${ed.bizDay||1}" onfocus="this.select()" oninput="state.editData.bizDay=Math.max(1,Math.min(23,parseInt(this.value)||1))" onblur="if(!this.value)this.value=state.editData.bizDay=1"/><span style="color:var(--text3);font-size:12px">営業日目</span></div>`:''}
+            ${ed.repeat==='monthday'?`<div class="biz-row"><span style="color:var(--text3);font-size:12px">毎月</span><input class="biz-inp" type="number" min="1" max="31" value="${ed.monthDay||1}" onfocus="this.select()" oninput="state.editData.monthDay=Math.max(1,Math.min(31,parseInt(this.value)||1))" onblur="if(!this.value)this.value=state.editData.monthDay=1"/><span style="color:var(--text3);font-size:12px">日</span></div>`:''}
+          </div>
+        </div>
+        <div class="exp-fld"><span class="exp-lbl">メモ</span><textarea class="exp-memo-inp" rows="3" oninput="state.editData.memo=this.value">${esc(ed.memo||'')}</textarea></div>
+        <div class="exp-acts">
+          <button class="mbtn cancel" style="padding:7px 14px;border-radius:6px;font-size:12px" onclick="cancelEdit()">キャンセル</button>
+          <button class="mbtn ok" style="padding:7px 14px;border-radius:6px;font-size:12px" onclick="saveEdit()">保存</button>
+        </div>
+      </div>`;
+    }else{
+      const nextStr=rp&&!t.done&&t.due?`<small class="dim">→ 次: ${advanceDue(t.due,t.repeat,t.bizDay,t.monthDay)}</small>`:'';
+      const nextDoneStr=rp&&t.done&&t.nextDue?`<small class="dim">次回表示: ${t.nextDue}の10日前</small>`:'';
+      const rtStr=t.reminderTime?`<small class="dim">${new Date(t.reminderTime).toLocaleString('ja-JP',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small>`:'';
+      panel=`<div class="exp-panel">
+        <div class="exp-fld"><span class="exp-lbl">優先度</span><span class="exp-val" style="color:${pri.color}">${pri.sym} ${pri.label}</span></div>
+        <div class="exp-fld"><span class="exp-lbl">カテゴリ</span><span class="exp-val" style="color:${cat.color}">${cat.label}</span></div>
+        <div class="exp-fld"><span class="exp-lbl">期限</span><span class="exp-val ${t.due?'':'emp'}" style="color:${ds?.color||'var(--text2)'};font-size:12px">${t.due||'未設定'}${ds&&!t.done?`<small class="dim">${ds.label}</small>`:''}</span></div>
+        <div class="exp-fld"><span class="exp-lbl">🔔 通知</span><span class="exp-val ${rl?'':'emp'}">${rl||'なし'}${rl?rtStr:''}</span></div>
+        <div class="exp-fld"><span class="exp-lbl">🔁 繰返</span><span class="exp-val ${rp?'':'emp'}" style="color:${rp?'var(--accent4)':'var(--text4)'}">${rp||'なし'}${nextStr}${nextDoneStr}</span></div>
+        <div class="exp-fld"><span class="exp-lbl">メモ</span><span class="exp-val ${t.memo?'':'emp'}" style="white-space:pre-wrap">${t.memo?esc(t.memo):'なし'}</span></div>
+      </div>`;
+    }
+  }
+
+  return `<div class="td-card${t.done?' done':''}${ds?.urgent&&!t.done?' overdue':''}${soonClass}">
+    <div class="td-main">
+      <button class="chk-btn${t.done?' on':''}" style="${t.done?`background:${cat.color}`:'color:transparent'}" onclick="${t.done?'confirmUncomplete':'confirmComplete'}(${t.id})">${t.done?'✓':''}</button>
+      <div class="cat-dot" style="background:${cat.color}"></div>
+      <span class="pri-sym" style="color:${pri.color}">${pri.sym}</span>
+      <div class="td-cnt" onclick="toggleExpand(${t.id})">
+        <div class="td-txt${t.done?' dn':''}">${esc(t.text)}</div>
+        <div class="td-meta">${badges}</div>
+      </div>
+      <button class="exp-btn" onclick="toggleExpand(${t.id})">${isExp?'▲':'▼'}</button>
+      <button class="act-btn" onclick="startEdit(${t.id})">✎</button>
+      <button class="act-btn" onclick="confirmDelete(${t.id})">✕</button>
+    </div>
+    ${rp&&!t.done&&!isExp?`<div class="rpt-info"><span class="rpt-info-t">🔁 ${rp}で自動更新 — 完了で次の期限へ</span></div>`:''}
+    ${panel}
+  </div>`;
+}
+
+function setFilter(f){state.filter=f;render();}
+function setActiveCat(c){state.cat=c;render();}
+function setSelCat(c){state.selCat=c;render();}
+function setSelPri(p){state.selPri=p;render();}
+function setReminder(r){state.reminder=r;render();}
+function setRepeat(r){state.repeat=r;render();}
+function setEditPri(p){state.editData.priority=p;render();}
+function setEditCat(c){state.editData.category=c;render();}
+function setEditReminder(r){state.editData.reminder=r;render();}
+function setEditRepeat(r){state.editData.repeat=r;render();}
+
+// ── Init ──
+requestNotif();
+loadFromFirebase();
+setInterval(checkResurface,3600000);
+</script>
+</body>
+</html>
