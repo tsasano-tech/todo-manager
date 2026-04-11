@@ -44,7 +44,7 @@ const DOC_REF = db.collection('todos').doc('sasano');
 :root{
   --bg:#1C1C1F;--bg2:#222226;--bg3:#252528;--bg4:#1E1E22;
   --border:#32323A;--border2:#36363D;
-  --text:#E8E5E0;--text2:#A0A0B0;--text3:#6A6A7A;--text4:#3A3A45;
+  --text:#F5F2ED;--text2:#D8D5D0;--text3:#B0B0B8;--text4:#707078;
   --accent:#7EC8E3;--accent2:#E8A0AA;--accent3:#F7DC6F;--accent4:#5AAA80;
   --card:#222226;
 }
@@ -90,12 +90,12 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .chip-opt{font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid #383840;cursor:pointer;background:transparent;color:var(--text3);white-space:nowrap;font-family:inherit;}
 .chip-opt.on{background:#2E2E38;color:#D0CCC8;border-color:#58586A;}
 .flt-row{display:flex;border-bottom:1px solid #2E2E35;margin-bottom:8px;}
-.flt-btn{font-size:12px;padding:8px 14px;background:transparent;border:none;color:#5A5A6A;cursor:pointer;font-family:inherit;position:relative;}
+.flt-btn{font-size:12px;padding:8px 14px;background:transparent;border:none;color:#8A8A9A;cursor:pointer;font-family:inherit;position:relative;}
 .flt-btn.on{color:var(--text);}
 .flt-btn.on::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--text);border-radius:2px;}
 .flt-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-top:10px;flex-wrap:wrap;gap:8px;}
 .cat-flt-row{display:flex;gap:6px;flex-wrap:wrap;}
-.cat-flt-btn{font-size:11px;padding:5px 11px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;font-family:inherit;}
+.cat-flt-btn{font-size:11px;padding:5px 11px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:#B0B0B8;cursor:pointer;font-family:inherit;}
 .srt-sel{background:var(--bg3);border:1px solid var(--border2);color:var(--text3);font-size:11px;padding:5px 8px;border-radius:6px;outline:none;font-family:inherit;}
 .td-list{display:flex;flex-direction:column;gap:4px;}
 .td-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
@@ -112,13 +112,13 @@ body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
 .cat-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .pri-sym{font-size:11px;flex-shrink:0;}
 .td-cnt{flex:1;min-width:0;cursor:pointer;}
-.td-txt{font-size:14px;color:var(--text);line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.td-txt.dn{text-decoration:line-through;color:#525260;}
+.td-txt{font-size:14px;color:#F0EDE8;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.td-txt.dn{text-decoration:line-through;color:#606068;}
 .td-meta{display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap;}
 .badge{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid;white-space:nowrap;}
-.memo-prev{font-size:11px;color:#585868;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
-.exp-btn{background:transparent;border:none;color:#484858;font-size:11px;cursor:pointer;padding:4px 5px;flex-shrink:0;font-family:inherit;}
-.act-btn{background:transparent;border:none;color:#484858;cursor:pointer;font-size:14px;padding:4px 5px;line-height:1;font-family:inherit;}
+.memo-prev{font-size:11px;color:#A0A0A8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
+.exp-btn{background:transparent;border:none;color:#707078;font-size:11px;cursor:pointer;padding:4px 5px;flex-shrink:0;font-family:inherit;}
+.act-btn{background:transparent;border:none;color:#707078;cursor:pointer;font-size:14px;padding:4px 5px;line-height:1;font-family:inherit;}
 .exp-panel{border-top:1px solid #2E2E35;padding:13px;display:flex;flex-direction:column;gap:11px;background:var(--bg4);}
 .exp-fld{display:flex;gap:10px;align-items:flex-start;}
 .exp-lbl{font-size:10px;letter-spacing:.1em;color:#5A5A6A;width:46px;flex-shrink:0;padding-top:3px;}
@@ -446,8 +446,17 @@ function getFiltered(){
       if(state.sort==='priority'){const o={high:0,mid:1,low:2};return o[a.priority]-o[b.priority];}
       if(state.sort==='due'){if(!a.due&&!b.due)return 0;if(!a.due)return 1;if(!b.due)return -1;return a.due.localeCompare(b.due);}
       if(state.sort==='priority_due'){
+        const now=new Date();now.setHours(0,0,0,0);
+        const isOverdue=t=>t.due&&new Date(t.due)<now;
+        // 期限超過を最優先
+        if(isOverdue(a)&&!isOverdue(b))return -1;
+        if(!isOverdue(a)&&isOverdue(b))return 1;
+        // 両方超過なら古い順
+        if(isOverdue(a)&&isOverdue(b))return a.due.localeCompare(b.due);
+        // 優先度
         const o={high:0,mid:1,low:2};
         const pd=o[a.priority]-o[b.priority];if(pd!==0)return pd;
+        // 期限
         if(!a.due&&!b.due)return b.id-a.id;
         if(!a.due)return 1;if(!b.due)return -1;
         const dd=a.due.localeCompare(b.due);if(dd!==0)return dd;
@@ -551,7 +560,7 @@ function renderTodo(t){
   if(ds&&!t.done)badges+=`<span class="badge" style="color:${ds.color};border-color:${ds.color}40">${ds.label}</span>`;
   if(t.due&&t.done)badges+=`<span class="badge" style="color:#333;border-color:#222">${t.due}</span>`;
   if(t.done&&t.nextDue)badges+=`<span class="badge" style="color:var(--accent4);border-color:#2A4035">🔁 ${t.nextDue}の10日前に復活</span>`;
-  if(rl&&!t.done)badges+=`<span class="badge" style="color:#7A7A8A;border-color:#383845">🔔 ${rl}</span>`;
+  if(rl&&!t.done)badges+=`<span class="badge" style="color:#B0B0C0;border-color:#4A4A58">🔔 ${rl}</span>`;
   if(rp)badges+=`<span class="badge" style="color:var(--accent4);border-color:#2A4035">🔁 ${rp}</span>`;
   if(t.memo)badges+=`<span class="memo-prev">✎ ${esc(t.memo)}</span>`;
 
